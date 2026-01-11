@@ -78,7 +78,8 @@ async function addTask() {
   const title = document.getElementById("taskTitle").value.trim();
   const description = document.getElementById("taskDescription").value.trim();
   const notes = document.getElementById("taskNotes").value.trim();
-  const needs = document.getElementById("taskNeeds").value.trim();
+  const needsText = document.getElementById("taskNeeds").value.trim();
+  const needs = needsText ? needsText.split('\n').map(n => n.trim()).filter(n => n) : [];
 
   await addDoc(tasksCollection, {
     title,
@@ -280,13 +281,18 @@ function renderNeeds(tasksToRender) {
   const container = document.getElementById("needsList");
   container.innerHTML = "";
   tasksToRender
-    .filter(task => !task.done && task.needs.length > 0)
+    .filter(task => {
+      if (task.done) return false;
+      const needs = Array.isArray(task.needs) ? task.needs : (task.needs ? [task.needs] : []);
+      return needs.length > 0;
+    })
     .forEach((task) => {
       const div = document.createElement("div");
       div.className = "needs-card";
+      const needs = Array.isArray(task.needs) ? task.needs : (task.needs ? [task.needs] : []);
       div.innerHTML = `
         <div class="task-link" onclick="jumpTo('task', '${task.id}')">From task: ${task.title}</div>
-        <ul>${task.needs.map((n) => `<li>${n}</li>`).join("")}</ul>
+        <ul>${needs.map((n) => `<li>${n}</li>`).join("")}</ul>
       `;
       container.appendChild(div);
     });
