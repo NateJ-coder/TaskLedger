@@ -5,6 +5,9 @@
   --muted: #6b7280;
   --border: #e5e7eb;
   --accent: #2563eb;
+  --sidebar-bg: #1f2933;
+  --sidebar-text: #e5e7eb;
+  --sidebar-active: var(--accent);
 }
 
 * {
@@ -14,15 +17,76 @@
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
-  padding: 32px;
   color: var(--text);
+  margin: 0;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: 240px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header h2 {
+  margin: 0 0 24px 0;
+  font-size: 1.5rem;
+}
+
+.nav-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-links a {
+  display: block;
+  padding: 12px 16px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--sidebar-text);
+  margin-bottom: 8px;
+  transition: background 0.2s ease;
+}
+
+.nav-links a:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nav-links a.active {
+  background: var(--sidebar-active);
+  font-weight: 600;
+}
+
+/* ---------- Main Content ---------- */
+.main-content {
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
   max-width: 900px;
   margin: 0 auto;
 }
 
-main {
-  display: flex;
-  flex-direction: column;
+.view {
+  display: none;
+  animation: fadeIn 0.5s ease;
+}
+
+.view.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 h1 {
@@ -30,8 +94,7 @@ h1 {
   margin-bottom: 20px;
 }
 
-/* ---------- Add Task ---------- */
-
+/* ---------- Add Task Form ---------- */
 .add-task {
   background: var(--card);
   padding: 20px;
@@ -48,17 +111,18 @@ h1 {
   border-radius: 6px;
   border: 1px solid var(--border);
   font-size: 0.95rem;
+  resize: vertical;
 }
 
-.add-task textarea {
-  resize: vertical;
-  min-height: 70px;
-}
+#taskDescription { min-height: 100px; }
+#taskNotes { min-height: 50px; }
+#taskNeeds { min-height: 50px; }
 
 .add-task input:focus,
 .add-task textarea:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 .add-task button {
@@ -69,15 +133,15 @@ h1 {
   padding: 10px 16px;
   font-size: 0.9rem;
   cursor: pointer;
+  transition: opacity 0.2s;
 }
 
 .add-task button:hover {
   opacity: 0.9;
 }
 
-/* ---------- Tasks ---------- */
-
-.task {
+/* ---------- Task, Memo, and Needs Cards ---------- */
+.task, .memo, .needs-card {
   background: var(--card);
   border-radius: 10px;
   padding: 16px 18px;
@@ -86,7 +150,7 @@ h1 {
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.task:hover {
+.task:hover, .memo:hover, .needs-card:hover {
   box-shadow: 0 8px 18px rgba(0,0,0,0.04);
   transform: translateY(-1px);
 }
@@ -95,22 +159,18 @@ h1 {
   opacity: 0.6;
 }
 
-/* ---------- Header ---------- */
-
-.task-header {
+.task-header, .memo-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.task-header strong {
+.task-header strong, .memo-header strong {
   font-size: 1.05rem;
   font-weight: 600;
 }
 
-/* ---------- Toggles ---------- */
-
-.toggle {
+.toggle, .jump-link {
   margin-top: 10px;
   font-size: 0.85rem;
   color: var(--accent);
@@ -118,20 +178,18 @@ h1 {
   user-select: none;
 }
 
-.toggle:hover {
+.toggle:hover, .jump-link:hover {
   text-decoration: underline;
 }
 
-/* ---------- Hidden Sections ---------- */
-
-.notes,
-.needs {
+.notes, .needs, .memo-body {
   margin-top: 8px;
   padding-left: 10px;
   border-left: 3px solid var(--border);
   color: var(--muted);
   font-size: 0.9rem;
   display: none;
+  white-space: pre-wrap; /* Respects newlines in description */
 }
 
 .needs li {
@@ -139,9 +197,12 @@ h1 {
   list-style: disc;
 }
 
-/* ---------- Checkbox ---------- */
-
 .task input[type="checkbox"] {
   transform: scale(1.1);
   cursor: pointer;
+}
+
+.needs-card .task-link {
+  font-size: 0.8rem;
+  color: var(--muted);
 }

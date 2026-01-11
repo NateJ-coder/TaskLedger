@@ -1,84 +1,185 @@
-// -----------------------------
-// Temporary in-memory storage
-// Replace this later with Firebase
-// -----------------------------
-let tasks = [];
+import { db } from "./firebase-config.js";
+import {
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  onSnapshot,
+  query,
+  orderBy,
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // -----------------------------
-function addTask() {
-  const title = taskTitle.value.trim();
-  const notes = taskNotes.value.trim();
-  const needs = taskNeeds.value
+// Make functions available to the browser
+// -----------------------------
+window.addTask = addTask;
+window.toggleDone = toggleDone;
+window.toggleSection = toggleSection;
+window.jumpTo = jumpTo;
+
+// -----------------------------
+// Global state
+// -----------------------------
+let tasks = [];
+const tasksCollection = collection(db, "tasks");
+
+// -----------------------------
+// Navigation
+// -----------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  const navLinks = document.querySelectorAll(".nav-link");
+  const views = document.querySelectorAll(".view");
+
+  navLinks.forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const viewName = link.getAttribute("data-view");
+
+      navLinks.forEach((l) => l.classList.remove("active"));
+      link.classList.add("active");
+
+      views.forEach((view) => {
+        if (view.id === `${viewName}-view`) {
+          view.classList.add("active");
+        } else {
+          view.classList.remove("active");
+        }
+      });
+    });
+  });
+});
+
+// -----------------------------
+async function addTask() {
+  const title = document.getElementById("taskTitle").value.trim();
+  const description = document.getElementById("taskDescription").value.trim();
+  const notes = document.getElementById("taskNotes").value.trim();
+  const needs = document.getElementById("taskNeeds").value
     .split("\n")
-    .map(n => n.trim())
+    .map((n) => n.trim())
     .filter(Boolean);
 
   if (!title) return;
 
-  tasks.push({
-    id: Date.now(),
+  await addDoc(tasksCollection, {
     title,
+    description,
     notes,
     needs,
-    done: false
+    done: false,
+    createdAt: new Date(),
   });
 
-  taskTitle.value = "";
-  taskNotes.value = "";
-  taskNeeds.value = "";
-
-  render();
+  document.getElementById("taskTitle").value = "";
+  document.getElementById("taskDescription").value = "";
+  document.getElementById("taskNotes").value = "";
+  document.getElementById("taskNeeds").value = "";
 }
 
 // -----------------------------
-function toggleDone(id) {
-  const task = tasks.find(t => t.id === id);
-  task.done = !task.done;
-  render();
+async function toggleDone(id) {
+  const task = tasks.find((t) => t.id === id);
+  const taskDoc = doc(db, "tasks", id);
+  await updateDoc(taskDoc, { done: !task.done });
 }
 
 // -----------------------------
 function toggleSection(id, section) {
   const el = document.getElementById(`${section}-${id}`);
   const isOpen = el.style.display === "block";
-
   el.style.display = isOpen ? "none" : "block";
-  el.style.opacity = isOpen ? 0 : 1;
 }
 
 // -----------------------------
-function render() {
+// Rendering Functions
+// -----------------------------
+function renderTasks(tasksToRender) {
   const container = document.getElementById("taskList");
   container.innerHTML = "";
-
-  tasks.forEach(task => {
+  tasksToRender.forEach((task) => {
     const div = document.createElement("div");
     div.className = `task ${task.done ? "done" : ""}`;
-
+    div.id = `task-${task.id}`;
     div.innerHTML = `
       <div class="task-header">
         <strong>${task.title}</strong>
-        <input type="checkbox" ${task.done ? "checked" : ""} 
-               onchange="toggleDone(${task.id})">
+        <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
       </div>
-
-      <div class="toggle" onclick="toggleSection(${task.id}, 'notes')">
-        📄 Notes
-      </div>
-      <div class="notes" id="notes-${task.id}">
-        ${task.notes || "<em>No notes</em>"}
-      </div>
-
-      <div class="toggle" onclick="toggleSection(${task.id}, 'needs')">
-        📌 Things I need from you
-      </div>
+      ${task.description ? `<div class="jump-link" onclick="jumpTo('memo', '${task.id}')">📝 View Memo</div>` : ""}
+      <div class="toggle" onclick="toggleSection('${task.id}', 'notes')">📄 Private Notes</div>
+      <div class="notes" id="notes-${task.id}">${task.notes || "<em>No notes</em>"}</div>
+      <div class="toggle" onclick="toggleSection('${task.id}', 'needs')">📌 Things I need</div>
       <ul class="needs" id="needs-${task.id}">
-        ${task.needs.map(n => `<li>${n}</li>`).join("")}
+        ${task.needs.length > 0 ? task.needs.map((n) => `<li>${n}</li>`).join("") : "<em>Nothing needed</em>"}
       </ul>
     `;
-
     container.appendChild(div);
   });
 }
 
-render();
+function renderMemos(tasksToRender) {
+  const container = document.getElementById("memoList");
+  container.innerHTML = "";
+  tasksToRender
+    .filter(task => task.description)
+    .forEach((task) => {
+      const div = document.createElement("div");
+      div.className = "memo";
+      div.id = `memo-${task.id}`;
+      div.innerHTML = `
+        <div class="memo-header">
+          <strong>${task.title}</strong>
+          <div class="jump-link" onclick="jumpTo('task', '${task.id}')">✅ View Task</div>
+        </div>
+        <div class="memo-body" style="display: block;">${task.description}</div>
+      `;
+      container.appendChild(div);
+    });
+}
+
+function renderNeeds(tasksToRender) {
+  const container = document.getElementById("needsList");
+  container.innerHTML = "";
+  tasksToRender
+    .filter(task => !task.done && task.needs.length > 0)
+    .forEach((task) => {
+      const div = document.createElement("div");
+      div.className = "needs-card";
+      div.innerHTML = `
+        <div class="task-link" onclick="jumpTo('task', '${task.id}')">From task: ${task.title}</div>
+        <ul>${task.needs.map((n) => `<li>${n}</li>`).join("")}</ul>
+      `;
+      container.appendChild(div);
+    });
+}
+
+function jumpTo(view, id) {
+  // Switch to the correct view
+  document.querySelector(`.nav-link[data-view="${view}s"]`).click();
+  
+  // Scroll to the element after a short delay to allow for view transition
+  setTimeout(() => {
+    const element = document.getElementById(`${view}-${id}`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Flash animation
+      element.style.transition = "background-color 0.1s ease-in-out";
+      element.style.backgroundColor = "rgba(37, 99, 235, 0.1)";
+      setTimeout(() => {
+        element.style.backgroundColor = "var(--card)";
+      }, 1000);
+    }
+  }, 300);
+}
+
+// -----------------------------
+// Fetch and listen for real-time updates
+// -----------------------------
+const q = query(tasksCollection, orderBy("createdAt", "desc"));
+onSnapshot(q, (snapshot) => {
+  tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  renderTasks(tasks);
+  renderMemos(tasks);
+  renderNeeds(tasks);
+});
+

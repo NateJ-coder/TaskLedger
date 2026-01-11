@@ -6,20 +6,42 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main>
+  <div class="app-container">
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <h2>TaskLedger</h2>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#" class="nav-link active" data-view="tasks">✅ Tasks</a></li>
+        <li><a href="#" class="nav-link" data-view="memos">📝 Memos</a></li>
+        <li><a href="#" class="nav-link" data-view="needs">📌 Needs</a></li>
+      </ul>
+    </nav>
 
-  <h1>Task Board</h1>
+    <main class="main-content">
+      <div id="tasks-view" class="view active">
+        <h1>Task Board</h1>
+        <section class="add-task">
+          <input id="taskTitle" placeholder="Task title" />
+          <textarea id="taskDescription" placeholder="Full memo/description for this task"></textarea>
+          <textarea id="taskNotes" placeholder="Private notes (not part of the memo)"></textarea>
+          <textarea id="taskNeeds" placeholder="What I need from you (one per line)"></textarea>
+          <button onclick="addTask()">Add Task</button>
+        </section>
+        <section id="taskList"></section>
+      </div>
 
-  <section class="add-task">
-    <input id="taskTitle" placeholder="Task title" />
-    <textarea id="taskNotes" placeholder="Hidden notes for this task"></textarea>
-    <textarea id="taskNeeds" placeholder="What I need from you (one per line)"></textarea>
-    <button onclick="addTask()">Add Task</button>
-  </section>
+      <div id="memos-view" class="view">
+        <h1>Memos</h1>
+        <section id="memoList"></section>
+      </div>
 
-  <section id="taskList"></section>
-
-  </main>
+      <div id="needs-view" class="view">
+        <h1>Aggregated Needs</h1>
+        <section id="needsList"></section>
+      </div>
+    </main>
+  </div>
 
   <script type="module" src="firebase-config.js"></script>
   <script type="module" src="script.js"></script>
