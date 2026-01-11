@@ -15,6 +15,7 @@
         <li><a href="#" class="nav-link active" data-view="tasks">✅ Tasks</a></li>
         <li><a href="#" class="nav-link" data-view="memos">📝 Memos</a></li>
         <li><a href="#" class="nav-link" data-view="needs">📌 Needs</a></li>
+        <li><a href="#" class="nav-link" data-view="completed">🎉 Completed</a></li>
       </ul>
     </nav>
 
@@ -40,7 +41,24 @@
         <h1>Aggregated Needs</h1>
         <section id="needsList"></section>
       </div>
+
+      <div id="completed-view" class="view">
+        <h1>Completed Tasks</h1>
+        <section id="completedList"></section>
+      </div>
     </main>
+  </div>
+
+  <div id="completionModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Task Complete!</h2>
+      <p>Add any relevant completion notes, links, or details below.</p>
+      <textarea id="completionNotes" placeholder="e.g., Deployed to production, link to report, etc."></textarea>
+      <div class="modal-actions">
+        <button onclick="saveCompletionDetails()">Save & Complete</button>
+        <button class="secondary" onclick="closeCompletionModal()">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="firebase-config.js"></script>

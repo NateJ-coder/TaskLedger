@@ -16,11 +16,14 @@ window.addTask = addTask;
 window.toggleDone = toggleDone;
 window.toggleSection = toggleSection;
 window.jumpTo = jumpTo;
+window.saveCompletionDetails = saveCompletionDetails;
+window.closeCompletionModal = closeCompletionModal;
 
 // -----------------------------
 // Global state
 // -----------------------------
 let tasks = [];
+let taskToCompleteId = null;
 const tasksCollection = collection(db, "tasks");
 
 // -----------------------------
@@ -68,6 +71,7 @@ async function addTask() {
     needs,
     done: false,
     createdAt: new Date(),
+    completionNotes: "",
   });
 
   document.getElementById("taskTitle").value = "";
@@ -80,8 +84,46 @@ async function addTask() {
 async function toggleDone(id) {
   const task = tasks.find((t) => t.id === id);
   const taskDoc = doc(db, "tasks", id);
-  await updateDoc(taskDoc, { done: !task.done });
+
+  if (!task.done) {
+    // If marking as complete, show the modal
+    openCompletionModal(id);
+  } else {
+    // If un-checking, mark as incomplete immediately
+    await updateDoc(taskDoc, { done: false, completionNotes: "" });
+  }
 }
+
+// -----------------------------
+// Completion Modal Logic
+// -----------------------------
+function openCompletionModal(id) {
+  taskToCompleteId = id;
+  document.getElementById("completionModal").style.display = "flex";
+}
+
+function closeCompletionModal() {
+  document.getElementById("completionModal").style.display = "none";
+  document.getElementById("completionNotes").value = "";
+  taskToCompleteId = null;
+  // Re-check the checkbox since the user cancelled
+  renderTasks(tasks.filter(t => !t.done));
+}
+
+async function saveCompletionDetails() {
+  if (!taskToCompleteId) return;
+
+  const notes = document.getElementById("completionNotes").value.trim();
+  const taskDoc = doc(db, "tasks", taskToCompleteId);
+
+  await updateDoc(taskDoc, {
+    done: true,
+    completionNotes: notes,
+  });
+
+  closeCompletionModal();
+}
+
 
 // -----------------------------
 function toggleSection(id, section) {
@@ -153,6 +195,20 @@ function renderNeeds(tasksToRender) {
     });
 }
 
+function renderCompleted(tasksToRender) {
+  const container = document.getElementById("completedList");
+  container.innerHTML = "";
+  tasksToRender.forEach((task) => {
+    const div = document.createElement("div");
+    div.className = "completed-task";
+    div.innerHTML = `
+      <strong>${task.title}</strong>
+      ${task.completionNotes ? `<div class="completion-notes">${task.completionNotes}</div>` : ""}
+    `;
+    container.appendChild(div);
+  });
+}
+
 function jumpTo(view, id) {
   // Switch to the correct view
   document.querySelector(`.nav-link[data-view="${view}s"]`).click();
@@ -178,8 +234,12 @@ function jumpTo(view, id) {
 const q = query(tasksCollection, orderBy("createdAt", "desc"));
 onSnapshot(q, (snapshot) => {
   tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  renderTasks(tasks);
-  renderMemos(tasks);
-  renderNeeds(tasks);
+  const activeTasks = tasks.filter(t => !t.done);
+  const completedTasks = tasks.filter(t => t.done);
+
+  renderTasks(activeTasks);
+  renderMemos(tasks); // Memos view shows all tasks with descriptions
+  renderNeeds(activeTasks);
+  renderCompleted(completedTasks);
 });
 
