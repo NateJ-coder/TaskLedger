@@ -94,7 +94,34 @@ h1 {
   margin-bottom: 20px;
 }
 
-/* ---------- Add Task Form ---------- */
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.view-header h1 {
+  margin: 0;
+}
+
+.add-task-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.add-task-btn:hover {
+  opacity: 0.9;
+}
+
+/* ---------- Add Task Form (in Modal) ---------- */
 .add-task {
   background: var(--card);
   padding: 20px;
@@ -138,6 +165,28 @@ h1 {
 
 .add-task button:hover {
   opacity: 0.9;
+}
+
+/* ---------- Task Action Buttons ---------- */
+.task-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.task-actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.task-actions button:hover {
+  background: var(--bg);
 }
 
 /* ---------- Task, Memo, and Needs Cards ---------- */
@@ -293,4 +342,79 @@ h1 {
   color: var(--muted);
   font-size: 0.9rem;
   white-space: pre-wrap;
+}
+
+/* ---------- Updates Feed ---------- */
+.update-item {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+}
+
+.update-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.update-task-ref {
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.update-task-ref:hover {
+  text-decoration: underline;
+}
+
+.update-body {
+  color: var(--text);
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.update-history {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.update-history-item {
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.update-timestamp {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-bottom: 4px;
+}
+
+.update-history {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.update-history-item {
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.update-timestamp {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-bottom: 4px;
 }

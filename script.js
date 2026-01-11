@@ -18,12 +18,18 @@ window.toggleSection = toggleSection;
 window.jumpTo = jumpTo;
 window.saveCompletionDetails = saveCompletionDetails;
 window.closeCompletionModal = closeCompletionModal;
+window.openAddTaskModal = openAddTaskModal;
+window.closeAddTaskModal = closeAddTaskModal;
+window.openUpdateModal = openUpdateModal;
+window.closeUpdateModal = closeUpdateModal;
+window.saveUpdate = saveUpdate;
 
 // -----------------------------
 // Global state
 // -----------------------------
 let tasks = [];
 let taskToCompleteId = null;
+let taskToUpdateId = null;
 const tasksCollection = collection(db, "tasks");
 
 // -----------------------------
@@ -53,16 +59,29 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // -----------------------------
+// Add Task Modal Logic
+// -----------------------------
+function openAddTaskModal() {
+  document.getElementById("addTaskModal").style.display = "flex";
+}
+
+function closeAddTaskModal() {
+  document.getElementById("addTaskModal").style.display = "none";
+  document.getElementById("taskTitle").value = "";
+  document.getElementById("taskDescription").value = "";
+  document.getElementById("taskNotes").value = "";
+  document.getElementById("taskNeeds").value = "";
+}
+
+// -----------------------------
 async function addTask() {
   const title = document.getElementById("taskTitle").value.trim();
   const description = document.getElementById("taskDescription").value.trim();
   const notes = document.getElementById("taskNotes").value.trim();
-  const needs = document.getElementById("taskNeeds").value
-    .split("\n")
-    .map((n) => n.trim())
-    .filter(Boolean);
+    updates: [],
+  });
 
-  if (!title) return;
+  closeAddTaskModal()
 
   await addDoc(tasksCollection, {
     title,
@@ -126,6 +145,59 @@ async function saveCompletionDetails() {
 
 
 // -----------------------------
+// -----------------------------
+// Update Modal Logic
+// -----------------------------
+function openUpdateModal(id) {
+  const task = tasks.find(t => t.id === id);
+  taskToUpdateId = id;
+  document.getElementById("updateTaskTitle").textContent = `Update for: ${task.title}`;
+  document.getElementById("updateModal").style.display = "flex";
+}
+
+function closeUpdateModal() {
+  document.getElementById("updateModal").style.display = "none";
+  document.getElementById("updateText").value = "";
+  taskToUpdateId = null;
+}
+
+async function saveUpdate() {
+  if (!taskToUpdateId) return;
+
+    const updates = task.updates || [];
+    const updateHistory = updates.length > 0 ? `
+      <div class="toggle" onclick="toggleSection('${task.id}', 'update-history')">📣 Update History (${updates.length})</div>
+      <div class="update-history" id="update-history-${task.id}" style="display: none;">
+        ${updates.slice().reverse().map(u => `
+          <div class="update-history-item">
+            <div class="update-timestamp">${new Date(u.timestamp.seconds * 1000).toLocaleString()}</div>
+            ${u.text}
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
+
+    div.innerHTML = `
+      <div class="task-header">
+        <strong>${task.title}</strong>
+        <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
+      </div>
+      <div class="task-actions">
+        <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
+        ${task.description ? `<button onclick="jumpTo('memo', '${task.id}')">📝 View Memo</button>` : ""}
+      </div>
+      ${updateHistory
+
+  const updates = task.updates || [];
+  updates.push({
+    text: updateText,
+    timestamp: new Date(),
+  });
+
+  await updateDoc(taskDoc, { updates });
+  closeUpdateModal();
+}
+
 function toggleSection(id, section) {
   const el = document.getElementById(`${section}-${id}`);
   const isOpen = el.style.display === "block";
@@ -156,7 +228,47 @@ function renderTasks(tasksToRender) {
       </ul>
     `;
     container.appendChild(div);
+  });renderUpdates(tasksToRender) {
+  const container = document.getElementById("updatesList");
+  container.innerHTML = "";
+
+  // Collect all updates with task context
+  const allUpdates = [];
+  tasksToRender.forEach(task => {
+    const updates = task.updates || [];
+    updates.forEach(update => {
+      allUpdates.push({
+        ...update,
+        taskId: task.id,
+        taskTitle: task.title,
+      });
+    });
   });
+
+  // Sort by timestamp, newest first
+  allUpdates.sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
+
+  if (allUpdates.length === 0) {
+    container.innerHTML = "<p style='color: var(--muted);'>No updates yet. Post an update from a task to get started.</p>";
+    return;
+  }
+
+  allUpdates.forEach(update => {
+    const div = document.createElement("div");
+    div.className = "update-item";
+    div.innerHTML = `
+      <div class="update-meta">
+        <span class="update-task-ref" onclick="jumpTo('task', '${update.taskId}')">${update.taskTitle}</span>
+        <span>${new Date(update.timestamp.seconds * 1000).toLocaleString()}</span>
+  renderUpdates(tasks);
+      </div>
+      <div class="update-body">${update.text}</div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function 
 }
 
 function renderMemos(tasksToRender) {
