@@ -159,29 +159,9 @@ function closeUpdateModal() {
 async function saveUpdate() {
   if (!taskToUpdateId) return;
 
-    const updates = task.updates || [];
-    const updateHistory = updates.length > 0 ? `
-      <div class="toggle" onclick="toggleSection('${task.id}', 'update-history')">📣 Update History (${updates.length})</div>
-      <div class="update-history" id="update-history-${task.id}" style="display: none;">
-        ${updates.slice().reverse().map(u => `
-          <div class="update-history-item">
-            <div class="update-timestamp">${new Date(u.timestamp.seconds * 1000).toLocaleString()}</div>
-            ${u.text}
-          </div>
-        `).join("")}
-      </div>
-    ` : "";
-
-    div.innerHTML = `
-      <div class="task-header">
-        <strong>${task.title}</strong>
-        <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
-      </div>
-      <div class="task-actions">
-        <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
-        ${task.description ? `<button onclick="jumpTo('memo', '${task.id}')">📝 View Memo</button>` : ""}
-      </div>
-      ${updateHistory
+  const task = tasks.find(t => t.id === taskToUpdateId);
+  const taskDoc = doc(db, "tasks", taskToUpdateId);
+  const updateText = document.getElementById("updateText").value.trim();
 
   const updates = task.updates || [];
   updates.push({
@@ -209,21 +189,35 @@ function renderTasks(tasksToRender) {
     const div = document.createElement("div");
     div.className = `task ${task.done ? "done" : ""}`;
     div.id = `task-${task.id}`;
+
+    const updates = task.updates || [];
+    const updateHistoryHTML = updates.length > 0 ? `
+      <div class="toggle" onclick="toggleSection('${task.id}', 'update-history')">📣 Update History (${updates.length})</div>
+      <div class="update-history" id="update-history-${task.id}" style="display: none;">
+        ${updates.slice().reverse().map(u => `
+          <div class="update-history-item">
+            <div class="update-timestamp">${new Date(u.timestamp.seconds * 1000).toLocaleString()}</div>
+            ${u.text}
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
+
     div.innerHTML = `
       <div class="task-header">
         <strong>${task.title}</strong>
         <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
       </div>
-      ${task.description ? `<div class="jump-link" onclick="jumpTo('memo', '${task.id}')">📝 View Memo</div>` : ""}
-      <div class="toggle" onclick="toggleSection('${task.id}', 'notes')">📄 Private Notes</div>
-      <div class="notes" id="notes-${task.id}">${task.notes || "<em>No notes</em>"}</div>
-      <div class="toggle" onclick="toggleSection('${task.id}', 'needs')">📌 Things I need</div>
-      <ul class="needs" id="needs-${task.id}">
-        ${task.needs.length > 0 ? task.needs.map((n) => `<li>${n}</li>`).join("") : "<em>Nothing needed</em>"}
-      </ul>
+      <div class="task-actions">
+        <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
+        ${task.description ? `<button onclick="jumpTo('memo', '${task.id}')">📝 View Memo</button>` : ""}
+      </div>
     `;
     container.appendChild(div);
-  });renderUpdates(tasksToRender) {
+  });
+}
+
+function renderUpdates(tasksToRender) {
   const container = document.getElementById("updatesList");
   container.innerHTML = "";
 
@@ -255,15 +249,11 @@ function renderTasks(tasksToRender) {
       <div class="update-meta">
         <span class="update-task-ref" onclick="jumpTo('task', '${update.taskId}')">${update.taskTitle}</span>
         <span>${new Date(update.timestamp.seconds * 1000).toLocaleString()}</span>
-  renderUpdates(tasks);
       </div>
       <div class="update-body">${update.text}</div>
     `;
     container.appendChild(div);
   });
-}
-
-function 
 }
 
 function renderMemos(tasksToRender) {
@@ -345,6 +335,7 @@ onSnapshot(q, (snapshot) => {
   const completedTasks = tasks.filter(t => t.done);
 
   renderTasks(activeTasks);
+  renderUpdates(tasks);
   renderMemos(tasks); // Memos view shows all tasks with descriptions
   renderNeeds(activeTasks);
   renderCompleted(completedTasks);
