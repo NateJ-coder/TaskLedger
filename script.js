@@ -78,10 +78,7 @@ async function addTask() {
   const title = document.getElementById("taskTitle").value.trim();
   const description = document.getElementById("taskDescription").value.trim();
   const notes = document.getElementById("taskNotes").value.trim();
-    updates: [],
-  });
-
-  closeAddTaskModal()
+  const needs = document.getElementById("taskNeeds").value.trim();
 
   await addDoc(tasksCollection, {
     title,
@@ -91,12 +88,10 @@ async function addTask() {
     done: false,
     createdAt: new Date(),
     completionNotes: "",
+    updates: [],
   });
 
-  document.getElementById("taskTitle").value = "";
-  document.getElementById("taskDescription").value = "";
-  document.getElementById("taskNotes").value = "";
-  document.getElementById("taskNeeds").value = "";
+  closeAddTaskModal();
 }
 
 // -----------------------------
