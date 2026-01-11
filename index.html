@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shared Task Board</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+
+  <h1>Task Board</h1>
+
+  <section class="add-task">
+    <input id="taskTitle" placeholder="Task title" />
+    <textarea id="taskNotes" placeholder="Hidden notes for this task"></textarea>
+    <textarea id="taskNeeds" placeholder="What I need from you (one per line)"></textarea>
+    <button onclick="addTask()">Add Task</button>
+  </section>
+
+  <section id="taskList"></section>
+
+  </main>
+
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module" src="script.js"></script>
+</body>
+</html>
