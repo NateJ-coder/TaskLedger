@@ -93,12 +93,25 @@
       <textarea id="taskNeeds" placeholder="What I need from you (one per line)"></textarea>
       <div class="priority-selector">
         <label for="taskPriority">Task Priority (for boss to manage):</label>
-        <select id="taskPriority">
+        <select id="taskPriority" onchange="handlePriorityChange()">
           <option value="high">🔴 High - Urgent</option>
           <option value="medium" selected>🟡 Medium - Moderate</option>
           <option value="low">🟢 Low - Can wait</option>
         </select>
         <p class="priority-note">💡 Note: Each need can have its own priority flag that you can set in the Needs view</p>
+      </div>
+      <div class="deadline-selector">
+        <label for="taskDeadline">Deadline:</label>
+        <select id="taskDeadline">
+          <option value="none">No deadline</option>
+          <option value="tomorrow">Tomorrow</option>
+          <option value="2days" selected>In 2 days</option>
+          <option value="1week">In 1 week</option>
+          <option value="2weeks">In 2 weeks</option>
+          <option value="3weeks">In 3 weeks</option>
+          <option value="1month">In 1 month</option>
+          <option value="2months">In 2 months</option>
+        </select>
       </div>
       <div class="modal-actions">
         <button onclick="addTask()">Add Task</button>
@@ -127,6 +140,18 @@
       <div class="modal-actions">
         <button onclick="saveUpdate()">Post Update</button>
         <button class="secondary" onclick="closeUpdateModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="memoModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Edit Memo</h2>
+      <p id="memoTaskTitle"></p>
+      <textarea id="memoText" placeholder="Enter detailed memo/description for this task..."></textarea>
+      <div class="modal-actions">
+        <button onclick="saveMemo()">Save Memo</button>
+        <button class="secondary" onclick="closeMemoModal()">Cancel</button>
       </div>
     </div>
   </div>

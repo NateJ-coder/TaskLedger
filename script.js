@@ -29,6 +29,10 @@ window.toggleNotificationsPanel = toggleNotificationsPanel;
 window.changeTaskPriority = changeTaskPriority;
 window.changeNeedPriority = changeNeedPriority;
 window.navigateToTask = navigateToTask;
+window.handlePriorityChange = handlePriorityChange;
+window.openMemoModal = openMemoModal;
+window.closeMemoModal = closeMemoModal;
+window.saveMemo = saveMemo;
 
 // -----------------------------
 // Global state
@@ -37,6 +41,7 @@ let tasks = [];
 let notifications = [];
 let taskToCompleteId = null;
 let taskToUpdateId = null;
+let taskToEditMemoId = null;
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
 
@@ -86,6 +91,21 @@ function closeAddTaskModal() {
   document.getElementById("taskNotes").value = "";
   document.getElementById("taskNeeds").value = "";
   document.getElementById("taskPriority").value = "medium";
+  document.getElementById("taskDeadline").value = "none";
+}
+
+// Handle priority change to auto-set deadline
+function handlePriorityChange() {
+  const priority = document.getElementById("taskPriority").value;
+  const deadlineSelect = document.getElementById("taskDeadline");
+  
+  if (priority === "high") {
+    deadlineSelect.value = "2days"; // High: 2 days default
+  } else if (priority === "medium") {
+    deadlineSelect.value = "2weeks"; // Medium: 2 weeks default
+  } else if (priority === "low") {
+    deadlineSelect.value = "1month"; // Low: 1 month default
+  }
 }
 
 // -----------------------------
@@ -95,6 +115,36 @@ async function addTask() {
   const notes = document.getElementById("taskNotes").value.trim();
   const needsText = document.getElementById("taskNeeds").value.trim();
   const priority = document.getElementById("taskPriority").value;
+  const deadlineOption = document.getElementById("taskDeadline").value;
+  
+  // Calculate deadline date
+  let deadline = null;
+  if (deadlineOption !== "none") {
+    const now = new Date();
+    switch(deadlineOption) {
+      case "tomorrow":
+        deadline = new Date(now.setDate(now.getDate() + 1));
+        break;
+      case "2days":
+        deadline = new Date(now.setDate(now.getDate() + 2));
+        break;
+      case "1week":
+        deadline = new Date(now.setDate(now.getDate() + 7));
+        break;
+      case "2weeks":
+        deadline = new Date(now.setDate(now.getDate() + 14));
+        break;
+      case "3weeks":
+        deadline = new Date(now.setDate(now.getDate() + 21));
+        break;
+      case "1month":
+        deadline = new Date(now.setMonth(now.getMonth() + 1));
+        break;
+      case "2months":
+        deadline = new Date(now.setMonth(now.getMonth() + 2));
+        break;
+    }
+  }
   
   // Convert needs to objects with text and priority
   const needs = needsText 
@@ -111,6 +161,7 @@ async function addTask() {
     notes,
     needs,
     priority,
+    deadline,
     done: false,
     createdAt: new Date(),
     completionNotes: "",
@@ -226,6 +277,36 @@ async function saveUpdate() {
   });
   
   closeUpdateModal();
+}
+
+// -----------------------------
+// Memo Modal Logic
+// -----------------------------
+function openMemoModal(id) {
+  const task = tasks.find(t => t.id === id);
+  taskToEditMemoId = id;
+  document.getElementById("memoTaskTitle").textContent = `Edit memo for: ${task.title}`;
+  document.getElementById("memoText").value = task.description || "";
+  document.getElementById("memoModal").style.display = "flex";
+}
+
+function closeMemoModal() {
+  document.getElementById("memoModal").style.display = "none";
+  document.getElementById("memoText").value = "";
+  taskToEditMemoId = null;
+}
+
+async function saveMemo() {
+  if (!taskToEditMemoId) return;
+
+  const memoText = document.getElementById("memoText").value.trim();
+  const taskDoc = doc(db, "tasks", taskToEditMemoId);
+
+  await updateDoc(taskDoc, {
+    description: memoText,
+  });
+
+  closeMemoModal();
 }
 
 // -----------------------------
@@ -358,12 +439,23 @@ function renderTasks(tasksToRender) {
   const container = document.getElementById("taskList");
   container.innerHTML = "";
   
-  // Sort tasks by priority (high > medium > low)
+  // Sort tasks by priority and deadline urgency
   const priorityOrder = { high: 0, medium: 1, low: 2 };
   const sortedTasks = [...tasksToRender].sort((a, b) => {
     const priorityA = priorityOrder[a.priority || "medium"];
     const priorityB = priorityOrder[b.priority || "medium"];
-    return priorityA - priorityB;
+    
+    // First sort by priority
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    
+    // Then by deadline (soonest first)
+    if (a.deadline && b.deadline) {
+      return new Date(a.deadline.seconds * 1000) - new Date(b.deadline.seconds * 1000);
+    }
+    if (a.deadline) return -1;
+    if (b.deadline) return 1;
+    
+    return 0;
   });
   
   sortedTasks.forEach((task) => {
@@ -374,6 +466,35 @@ function renderTasks(tasksToRender) {
     const priority = task.priority || "medium";
     const priorityEmoji = priority === "high" ? "🔴" : priority === "medium" ? "🟡" : "🟢";
     const priorityLabel = priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low";
+    
+    // Format deadline
+    let deadlineHTML = "";
+    if (task.deadline) {
+      const deadlineDate = new Date(task.deadline.seconds * 1000);
+      const now = new Date();
+      const daysUntil = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
+      
+      let deadlineClass = "deadline-normal";
+      let deadlineText = deadlineDate.toLocaleDateString();
+      
+      if (daysUntil < 0) {
+        deadlineClass = "deadline-overdue";
+        deadlineText += ` (Overdue)`;
+      } else if (daysUntil === 0) {
+        deadlineClass = "deadline-today";
+        deadlineText = "Due Today";
+      } else if (daysUntil === 1) {
+        deadlineClass = "deadline-tomorrow";
+        deadlineText = "Due Tomorrow";
+      } else if (daysUntil <= 3) {
+        deadlineClass = "deadline-soon";
+        deadlineText = `Due in ${daysUntil} days`;
+      } else if (daysUntil <= 7) {
+        deadlineText = `Due in ${daysUntil} days`;
+      }
+      
+      deadlineHTML = `<span class="deadline-badge ${deadlineClass}">⏰ ${deadlineText}</span>`;
+    }
 
     const updates = task.updates || [];
     const updateHistoryHTML = updates.length > 0 ? `
@@ -393,12 +514,13 @@ function renderTasks(tasksToRender) {
         <div>
           <strong>${task.title}</strong>
           <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
+          ${deadlineHTML}
         </div>
         <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
       </div>
       <div class="task-actions">
         <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
-        ${task.description ? `<button onclick="jumpTo('memo', '${task.id}')">📝 View Memo</button>` : ""}
+        <button onclick="openMemoModal('${task.id}')">📝 ${task.description ? 'Edit' : 'Add'} Memo</button>
         <button class="priority-change-btn" onclick="changeTaskPriority('${task.id}')">🚩 Change Task Priority</button>
       </div>
     `;
@@ -576,8 +698,16 @@ function renderNotifications(docs) {
     
     const clickHandler = taskId ? `onclick="navigateToTask('${taskId}', '${notificationId}')"` : '';
     
+    // Add special styling for deadline notifications
+    let notificationClass = `notification-item ${!notification.read ? "unread" : ""}`;
+    if (notification.type === "deadline_today" || notification.type === "deadline_overdue") {
+      notificationClass += " notification-urgent";
+    } else if (notification.type === "deadline_warning") {
+      notificationClass += " notification-warning";
+    }
+    
     return `
-      <div class="notification-item ${!notification.read ? "unread" : ""}" ${clickHandler}>
+      <div class="${notificationClass}" ${clickHandler}>
         <div class="notification-title">${message}</div>
         <div class="notification-time">${timeAgo}</div>
       </div>
@@ -597,6 +727,111 @@ function getTimeAgo(timestamp) {
 }
 
 // -----------------------------
+// Deadline Notification System
+// -----------------------------
+async function checkDeadlineNotifications() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  for (const task of tasks) {
+    if (task.done || !task.deadline) continue;
+    
+    const deadlineDate = new Date(task.deadline.seconds * 1000);
+    const deadlineDay = new Date(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate());
+    
+    const daysUntil = Math.ceil((deadlineDay - today) / (1000 * 60 * 60 * 24));
+    
+    // Initialize notificationsSent if it doesn't exist
+    const notificationsSent = task.notificationsSent || {};
+    
+    // Check if deadline is tomorrow and notification not sent
+    if (daysUntil === 1 && !notificationsSent.oneDayBefore) {
+      await addDoc(notificationsCollection, {
+        type: "deadline_warning",
+        taskId: task.id,
+        message: `⚠️ Deadline approaching: "${task.title}" is due tomorrow`,
+        createdAt: new Date(),
+        read: false,
+      });
+      
+      // Mark that we sent this notification
+      const taskDoc = doc(db, "tasks", task.id);
+      await updateDoc(taskDoc, {
+        "notificationsSent.oneDayBefore": true
+      });
+      
+      console.log(`📅 Sent 1-day warning for: ${task.title}`);
+    }
+    
+    // Check if deadline is today and notification not sent
+    if (daysUntil === 0 && !notificationsSent.dueToday) {
+      await addDoc(notificationsCollection, {
+        type: "deadline_today",
+        taskId: task.id,
+        message: `🚨 URGENT: "${task.title}" is due TODAY!`,
+        createdAt: new Date(),
+        read: false,
+      });
+      
+      // Mark that we sent this notification
+      const taskDoc = doc(db, "tasks", task.id);
+      await updateDoc(taskDoc, {
+        "notificationsSent.dueToday": true
+      });
+      
+      console.log(`🚨 Sent due-today alert for: ${task.title}`);
+    }
+    
+    // Check if deadline is 3 days away for high priority tasks
+    if (task.priority === 'high' && daysUntil === 3 && !notificationsSent.threeDayBefore) {
+      await addDoc(notificationsCollection, {
+        type: "deadline_warning",
+        taskId: task.id,
+        message: `⏰ High priority task: "${task.title}" is due in 3 days`,
+        createdAt: new Date(),
+        read: false,
+      });
+      
+      const taskDoc = doc(db, "tasks", task.id);
+      await updateDoc(taskDoc, {
+        "notificationsSent.threeDayBefore": true
+      });
+      
+      console.log(`⏰ Sent 3-day warning for high-priority: ${task.title}`);
+    }
+    
+    // Check if task is overdue and notification not sent
+    if (daysUntil < 0 && !notificationsSent.overdue) {
+      await addDoc(notificationsCollection, {
+        type: "deadline_overdue",
+        taskId: task.id,
+        message: `❗ OVERDUE: "${task.title}" was due ${Math.abs(daysUntil)} day${Math.abs(daysUntil) > 1 ? 's' : ''} ago`,
+        createdAt: new Date(),
+        read: false,
+      });
+      
+      const taskDoc = doc(db, "tasks", task.id);
+      await updateDoc(taskDoc, {
+        "notificationsSent.overdue": true
+      });
+      
+      console.log(`❗ Sent overdue alert for: ${task.title}`);
+    }
+  }
+}
+
+// Run deadline check when tasks update
+let deadlineCheckTimeout;
+function scheduleDeadlineCheck() {
+  clearTimeout(deadlineCheckTimeout);
+  deadlineCheckTimeout = setTimeout(() => {
+    checkDeadlineNotifications().catch(err => {
+      console.error("Error checking deadlines:", err);
+    });
+  }, 1000); // Wait 1 second after tasks update to check
+}
+
+// -----------------------------
 // Fetch and listen for real-time updates
 // -----------------------------
 const q = query(tasksCollection, orderBy("createdAt", "desc"));
@@ -610,6 +845,9 @@ onSnapshot(q, (snapshot) => {
   renderMemos(tasks); // Memos view shows all tasks with descriptions
   renderNeeds(activeTasks);
   renderCompleted(completedTasks);
+  
+  // Check for deadline notifications
+  scheduleDeadlineCheck();
 }, (error) => {
   console.log("Error fetching tasks:", error);
 });
@@ -637,5 +875,23 @@ onSnapshot(notificationsQuery, (snapshot) => {
   renderNotifications(unreadDocs);
 }, (error) => {
   console.log("Error fetching notifications:", error);
+});
+
+// Run deadline check periodically (every hour)
+setInterval(() => {
+  if (tasks.length > 0) {
+    checkDeadlineNotifications().catch(err => {
+      console.error("Periodic deadline check error:", err);
+    });
+  }
+}, 60 * 60 * 1000); // Check every hour
+
+// Also check deadlines when page becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && tasks.length > 0) {
+    checkDeadlineNotifications().catch(err => {
+      console.error("Visibility deadline check error:", err);
+    });
+  }
 });
 
