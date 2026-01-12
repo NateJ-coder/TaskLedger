@@ -1,4 +1,4 @@
-import { db } from "./firebase-config.js";
+import { db, storage } from "./firebase-config.js";
 import {
   collection,
   addDoc,
@@ -9,7 +9,14 @@ import {
   orderBy,
   where,
   getDocs,
+  deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 // -----------------------------
 // Make functions available to the browser
@@ -54,6 +61,10 @@ window.toggleCompletedBin = toggleCompletedBin;
 window.openNeedCompletionModal = openNeedCompletionModal;
 window.closeNeedCompletionModal = closeNeedCompletionModal;
 window.saveNeedCompletion = saveNeedCompletion;
+window.openFileUploadModal = openFileUploadModal;
+window.closeFileUploadModal = closeFileUploadModal;
+window.uploadPermanentFile = uploadPermanentFile;
+window.deletePermanentFile = deletePermanentFile;
 
 // -----------------------------
 // Loading Indicator Functions
@@ -216,6 +227,7 @@ async function addTask() {
   const needsText = document.getElementById("taskNeeds").value.trim();
   const priority = document.getElementById("taskPriority").value;
   const deadlineOption = document.getElementById("taskDeadline").value;
+  const fileInput = document.getElementById("taskFileInput");
   
   // Calculate deadline date
   let deadline = null;
@@ -295,6 +307,16 @@ async function addTask() {
     attachments: [], // Initialize empty attachments array
   });
 
+  // Upload file if selected
+  if (fileInput && fileInput.files[0]) {
+    try {
+      await uploadTaskFile(newTask.id, fileInput.files[0]);
+    } catch (error) {
+      console.error('File upload failed:', error);
+      // Continue even if file upload fails
+    }
+  }
+
   // Determine recipient (the other user)
   // TESTING MODE: Send to self to test notifications
   const recipient = currentUser; // For testing: currentUser === "Nate" ? "Craig" : "Nate";
@@ -359,6 +381,14 @@ async function saveCompletionDetails() {
   const task = tasks.find(t => t.id === taskToCompleteId);
   const notes = document.getElementById("completionNotes").value.trim();
   const taskDoc = doc(db, "tasks", taskToCompleteId);
+
+  // Delete all task files before marking complete
+  try {
+    await deleteTaskFiles(task);
+  } catch (error) {
+    console.error('Error deleting task files:', error);
+    // Continue even if file deletion fails
+  }
 
   await updateDoc(taskDoc, {
     done: true,
@@ -439,12 +469,29 @@ function openMemoModal(id) {
   taskToEditMemoId = id;
   document.getElementById("memoTaskTitle").textContent = `Edit memo for: ${task.title}`;
   document.getElementById("memoText").value = task.description || "";
+  
+  // Load existing media
+  document.getElementById("memoImageUrl").value = task.memoImageUrl || "";
+  const memoLinks = task.memoLinks || [];
+  document.getElementById("memoLinks").value = memoLinks.map(link => `${link.text} | ${link.url}`).join('\n');
+  
+  // Show image preview if exists
+  const preview = document.getElementById("memoImagePreview");
+  if (task.memoImageUrl) {
+    preview.innerHTML = `<img src="${task.memoImageUrl}" alt="Memo image" />`;
+  } else {
+    preview.innerHTML = "";
+  }
+  
   document.getElementById("memoModal").style.display = "flex";
 }
 
 function closeMemoModal() {
   document.getElementById("memoModal").style.display = "none";
   document.getElementById("memoText").value = "";
+  document.getElementById("memoImageUrl").value = "";
+  document.getElementById("memoLinks").value = "";
+  document.getElementById("memoImagePreview").innerHTML = "";
   taskToEditMemoId = null;
 }
 
@@ -454,11 +501,35 @@ async function saveMemo() {
   showLoading('Saving memo...');
   const task = tasks.find(t => t.id === taskToEditMemoId);
   const memoText = document.getElementById("memoText").value.trim();
+  const imageUrl = document.getElementById("memoImageUrl").value.trim();
+  const linksText = document.getElementById("memoLinks").value.trim();
+  const fileInput = document.getElementById("memoFileInput");
+  
+  // Parse links
+  const memoLinks = linksText ? linksText.split('\n').map(line => {
+    const parts = line.split('|').map(p => p.trim());
+    if (parts.length === 2 && parts[1]) {
+      return { text: parts[0] || parts[1], url: parts[1] };
+    }
+    return null;
+  }).filter(link => link !== null) : [];
+  
   const taskDoc = doc(db, "tasks", taskToEditMemoId);
 
   await updateDoc(taskDoc, {
     description: memoText,
+    memoImageUrl: imageUrl,
+    memoLinks: memoLinks,
   });
+
+  // Upload file if selected
+  if (fileInput && fileInput.files[0]) {
+    try {
+      await uploadMemoFile(taskToEditMemoId, fileInput.files[0]);
+    } catch (error) {
+      console.error('Memo file upload failed:', error);
+    }
+  }
 
   // Send notification to the other user about memo update
   const recipient = currentUser === "Nate" ? "Craig" : "Nate";
@@ -581,12 +652,29 @@ function openNeedsModal(id) {
   }).join('\n');
   
   document.getElementById("needsText").value = needsText;
+  
+  // Load existing media
+  document.getElementById("needsImageUrl").value = task.needsImageUrl || "";
+  const needsLinks = task.needsLinks || [];
+  document.getElementById("needsLinks").value = needsLinks.map(link => `${link.text} | ${link.url}`).join('\n');
+  
+  // Show image preview if exists
+  const preview = document.getElementById("needsImagePreview");
+  if (task.needsImageUrl) {
+    preview.innerHTML = `<img src="${task.needsImageUrl}" alt="Needs image" />`;
+  } else {
+    preview.innerHTML = "";
+  }
+  
   document.getElementById("needsModal").style.display = "flex";
 }
 
 function closeNeedsModal() {
   document.getElementById("needsModal").style.display = "none";
   document.getElementById("needsText").value = "";
+  document.getElementById("needsImageUrl").value = "";
+  document.getElementById("needsLinks").value = "";
+  document.getElementById("needsImagePreview").innerHTML = "";
   taskToEditNeedsId = null;
 }
 
@@ -595,6 +683,17 @@ async function saveNeeds() {
 
   showLoading('Saving needs...');
   const needsText = document.getElementById("needsText").value.trim();
+  const imageUrl = document.getElementById("needsImageUrl").value.trim();
+  const linksText = document.getElementById("needsLinks").value.trim();
+  
+  // Parse links
+  const needsLinks = linksText ? linksText.split('\n').map(line => {
+    const parts = line.split('|').map(p => p.trim());
+    if (parts.length === 2 && parts[1]) {
+      return { text: parts[0] || parts[1], url: parts[1] };
+    }
+    return null;
+  }).filter(link => link !== null) : [];
   
   // Parse needs with priority tags [high], [medium], [low]
   const needs = needsText 
@@ -632,6 +731,8 @@ async function saveNeeds() {
   const taskDoc = doc(db, "tasks", taskToEditNeedsId);
   await updateDoc(taskDoc, {
     needs: needs,
+    needsImageUrl: imageUrl,
+    needsLinks: needsLinks,
   });
 
   // Send notification to the other user about needs update
@@ -1066,6 +1167,18 @@ function renderTasks(tasksToRender) {
       </div>
     ` : "";
 
+    // Render attached file (temporary)
+    const fileHTML = task.attachedFile ? `
+      <div class="task-file-attachment">
+        <div class="file-icon">${getFileIcon(task.attachedFile.type)}</div>
+        <div class="file-info-compact">
+          <div class="file-name-small">${task.attachedFile.name}</div>
+          <div class="file-size-small">${(task.attachedFile.size / 1024).toFixed(2)} KB</div>
+        </div>
+        <a href="${task.attachedFile.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+      </div>
+    ` : "";
+
     div.innerHTML = `
       <div class="task-header">
         <div>
@@ -1077,6 +1190,7 @@ function renderTasks(tasksToRender) {
       </div>
       ${updateHistoryHTML}
       ${attachmentsHTML}
+      ${fileHTML}
       <div class="task-actions">
         <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
         <button onclick="openMemoModal('${task.id}')">📝 ${task.description ? 'Edit' : 'Add'} Memo</button>
@@ -1135,6 +1249,16 @@ async function toggleMemoComplete(taskId) {
   const taskDoc = doc(db, "tasks", taskId);
   
   const newStatus = !task.memoCompleted;
+  
+  // If completing, delete the memo file
+  if (newStatus) {
+    try {
+      await deleteMemoFile(task);
+    } catch (error) {
+      console.error('Error deleting memo file:', error);
+    }
+  }
+  
   await updateDoc(taskDoc, { memoCompleted: newStatus });
   
   // Send notification
@@ -1244,6 +1368,13 @@ async function saveNeedCompletion() {
     needs[needToCompleteIndex] = { text: needs[needToCompleteIndex], priority: 'medium' };
   }
   
+  // Delete need file if it exists
+  try {
+    await deleteNeedFile(needs[needToCompleteIndex]);
+  } catch (error) {
+    console.error('Error deleting need file:', error);
+  }
+  
   needs[needToCompleteIndex].completed = true;
   needs[needToCompleteIndex].completionNote = note;
   needs[needToCompleteIndex].completionLink = link;
@@ -1290,6 +1421,43 @@ function renderMemos(tasksToRender) {
       div.className = "memo";
       div.id = `memo-${task.id}`;
       const isCompleted = task.memoCompleted || false;
+      
+      // Build media HTML
+      let mediaHtml = '';
+      if (task.memoImageUrl || (task.memoLinks && task.memoLinks.length > 0) || task.memoFile) {
+        mediaHtml = '<div class="memo-media">';
+        
+        // Add file if exists
+        if (task.memoFile) {
+          mediaHtml += `
+            <div class="task-file-attachment">
+              <div class="file-icon">${getFileIcon(task.memoFile.type)}</div>
+              <div class="file-info-compact">
+                <div class="file-name-small">${task.memoFile.name}</div>
+                <div class="file-size-small">${(task.memoFile.size / 1024).toFixed(2)} KB</div>
+              </div>
+              <a href="${task.memoFile.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+            </div>
+          `;
+        }
+        
+        // Add image if exists
+        if (task.memoImageUrl) {
+          mediaHtml += `<div class="memo-image"><img src="${task.memoImageUrl}" alt="Memo image" /></div>`;
+        }
+        
+        // Add links if exist
+        if (task.memoLinks && task.memoLinks.length > 0) {
+          mediaHtml += '<div class="memo-links">';
+          task.memoLinks.forEach(link => {
+            mediaHtml += `<a href="${link.url}" target="_blank" rel="noopener noreferrer">🔗 ${link.text}</a>`;
+          });
+          mediaHtml += '</div>';
+        }
+        
+        mediaHtml += '</div>';
+      }
+      
       div.innerHTML = `
         <div class="memo-header">
           <div class="memo-header-left">
@@ -1299,6 +1467,7 @@ function renderMemos(tasksToRender) {
           <div class="jump-link" onclick="jumpTo('task', '${task.id}')">✅ View Task</div>
         </div>
         <div class="memo-body ${isCompleted ? 'crossed-off' : ''}" style="display: block;">${task.description}</div>
+        ${mediaHtml}
       `;
       container.appendChild(div);
     });
@@ -1346,6 +1515,28 @@ function renderNeeds(tasksToRender) {
     const priorityEmoji = priority === "high" ? "🔴" : priority === "medium" ? "🟡" : "🟢";
     const priorityLabel = priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low";
     
+    // Build media HTML for needs
+    let needMediaHtml = '';
+    if (need.needsImageUrl || (need.needsLinks && need.needsLinks.length > 0)) {
+      needMediaHtml = '<div class="need-media">';
+      
+      // Add image if exists
+      if (need.needsImageUrl) {
+        needMediaHtml += `<div class="need-image"><img src="${need.needsImageUrl}" alt="Need image" /></div>`;
+      }
+      
+      // Add links if exist
+      if (need.needsLinks && need.needsLinks.length > 0) {
+        needMediaHtml += '<div class="need-links">';
+        need.needsLinks.forEach(link => {
+          needMediaHtml += `<a href="${link.url}" target="_blank" rel="noopener noreferrer">🔗 ${link.text}</a>`;
+        });
+        needMediaHtml += '</div>';
+      }
+      
+      needMediaHtml += '</div>';
+    }
+    
     div.innerHTML = `
       <div class="need-header">
         <div class="task-link" onclick="jumpTo('task', '${need.taskId}')">From task: ${need.taskTitle}</div>
@@ -1355,6 +1546,7 @@ function renderNeeds(tasksToRender) {
         <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleNeedComplete('${need.taskId}', ${need.needIndex})" class="need-checkbox">
         <div class="need-text ${isCompleted ? 'crossed-off' : ''}">${need.text}</div>
       </div>
+      ${needMediaHtml}
       <button class="priority-change-btn" onclick="changeNeedPriority('${need.taskId}', ${need.needIndex})">🚩 Change Need Priority</button>
     `;
     container.appendChild(div);
@@ -1384,15 +1576,34 @@ function renderCompletedBin() {
   if (completedMemos.length === 0) {
     memosContainer.innerHTML = "<p class='no-items'>No completed memos</p>";
   } else {
-    memosContainer.innerHTML = completedMemos.map(task => `
-      <div class="bin-item">
-        <div class="bin-item-header">
-          <strong>${task.title}</strong>
-          <button class="restore-btn" onclick="toggleMemoComplete('${task.id}')" title="Restore">↺</button>
+    memosContainer.innerHTML = completedMemos.map(task => {
+      let mediaHtml = '';
+      
+      // Add image if exists
+      if (task.memoImageUrl) {
+        mediaHtml += `<div class="bin-media-image"><img src="${task.memoImageUrl}" alt="Memo image" style="max-width: 100%; max-height: 150px; border-radius: 4px; margin-top: 8px;" /></div>`;
+      }
+      
+      // Add links if exist
+      if (task.memoLinks && task.memoLinks.length > 0) {
+        mediaHtml += '<div class="bin-media-links" style="margin-top: 8px;">';
+        task.memoLinks.forEach(link => {
+          mediaHtml += `<div><a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-size: 0.85rem;">🔗 ${link.text}</a></div>`;
+        });
+        mediaHtml += '</div>';
+      }
+      
+      return `
+        <div class="bin-item">
+          <div class="bin-item-header">
+            <strong>${task.title}</strong>
+            <button class="restore-btn" onclick="toggleMemoComplete('${task.id}')" title="Restore">↺</button>
+          </div>
+          <div class="bin-item-body">${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}</div>
+          ${mediaHtml}
         </div>
-        <div class="bin-item-body">${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}</div>
-      </div>
-    `).join("");
+      `;
+    }).join("");
   }
   
   // Render completed needs
@@ -1425,6 +1636,20 @@ function renderCompletedBin() {
       if (need.completionLink) {
         detailsHTML += `<div class="completion-detail"><strong>Link:</strong> <a href="${need.completionLink}" target="_blank" rel="noopener">${need.completionLink}</a></div>`;
       }
+      
+      // Add media from the need itself
+      if (need.needsImageUrl) {
+        detailsHTML += `<div class="bin-media-image"><img src="${need.needsImageUrl}" alt="Need image" style="max-width: 100%; max-height: 150px; border-radius: 4px; margin-top: 8px;" /></div>`;
+      }
+      
+      if (need.needsLinks && need.needsLinks.length > 0) {
+        detailsHTML += '<div class="bin-media-links" style="margin-top: 8px;">';
+        need.needsLinks.forEach(link => {
+          detailsHTML += `<div><a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-size: 0.85rem;">🔗 ${link.text}</a></div>`;
+        });
+        detailsHTML += '</div>';
+      }
+      
       if (need.completedAt) {
         const completedDate = need.completedAt.seconds ? new Date(need.completedAt.seconds * 1000) : new Date(need.completedAt);
         detailsHTML += `<div class="completion-detail" style="font-size: 0.75rem; color: var(--muted);">Completed ${completedDate.toLocaleDateString()} by ${need.completedBy}</div>`;
@@ -1724,6 +1949,9 @@ function initializeApp() {
     hideLoading();
   });
 
+  // Initialize permanent files listener
+  initPermanentFilesListener();
+
   // Listen for all notifications for current user
   showLoading('Loading notifications...');
   const notificationsQuery = query(
@@ -1811,5 +2039,321 @@ function initializeApp() {
       });
     }
   });
+}
+
+// ========================================
+// FILE MANAGEMENT FUNCTIONS
+// ========================================
+
+// Upload file to Storage and return download URL
+async function uploadFileToStorage(file, path) {
+  const storageRef = ref(storage, path);
+  const uploadTask = uploadBytesResumable(storageRef, file);
+  
+  return new Promise((resolve, reject) => {
+    uploadTask.on('state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        console.log('Upload is ' + progress + '% done');
+      },
+      (error) => reject(error),
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        resolve({ url: downloadURL, path: path, name: file.name, size: file.size, type: file.type });
+      }
+    );
+  });
+}
+
+// Delete file from Storage
+async function deleteFileFromStorage(filePath) {
+  try {
+    const fileRef = ref(storage, filePath);
+    await deleteObject(fileRef);
+    console.log('File deleted successfully:', filePath);
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    // Don't throw - file might already be deleted
+  }
+}
+
+// Handle task file upload
+async function uploadTaskFile(taskId, file) {
+  showLoading('Uploading file...');
+  try {
+    const path = `tasks/${taskId}/${Date.now()}_${file.name}`;
+    const fileData = await uploadFileToStorage(file, path);
+    
+    // Save file reference to task
+    const taskDoc = doc(db, "tasks", taskId);
+    await updateDoc(taskDoc, {
+      attachedFile: fileData
+    });
+    
+    hideLoading();
+    return fileData;
+  } catch (error) {
+    console.error('Error uploading task file:', error);
+    hideLoading();
+    alert('Failed to upload file. Please try again.');
+    throw error;
+  }
+}
+
+// Handle memo file upload
+async function uploadMemoFile(taskId, file) {
+  showLoading('Uploading file...');
+  try {
+    const path = `memos/${taskId}/${Date.now()}_${file.name}`;
+    const fileData = await uploadFileToStorage(file, path);
+    
+    const taskDoc = doc(db, "tasks", taskId);
+    await updateDoc(taskDoc, {
+      memoFile: fileData
+    });
+    
+    hideLoading();
+    return fileData;
+  } catch (error) {
+    console.error('Error uploading memo file:', error);
+    hideLoading();
+    alert('Failed to upload file. Please try again.');
+    throw error;
+  }
+}
+
+// Handle needs file upload
+async function uploadNeedsFile(taskId, needIndex, file) {
+  showLoading('Uploading file...');
+  try {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) throw new Error('Task not found');
+    
+    const path = `needs/${taskId}/${needIndex}/${Date.now()}_${file.name}`;
+    const fileData = await uploadFileToStorage(file, path);
+    
+    // Update the specific need with file data
+    const needs = [...(task.needs || [])];
+    if (!needs[needIndex]) throw new Error('Need not found');
+    
+    needs[needIndex] = {
+      ...needs[needIndex],
+      attachedFile: fileData
+    };
+    
+    const taskDoc = doc(db, "tasks", taskId);
+    await updateDoc(taskDoc, { needs });
+    
+    hideLoading();
+    return fileData;
+  } catch (error) {
+    console.error('Error uploading needs file:', error);
+    hideLoading();
+    alert('Failed to upload file. Please try again.');
+    throw error;
+  }
+}
+
+// Delete task files on completion
+async function deleteTaskFiles(task) {
+  const filesToDelete = [];
+  
+  // Task attached file
+  if (task.attachedFile?.path) {
+    filesToDelete.push(deleteFileFromStorage(task.attachedFile.path));
+  }
+  
+  // Memo file
+  if (task.memoFile?.path) {
+    filesToDelete.push(deleteFileFromStorage(task.memoFile.path));
+  }
+  
+  // Needs files
+  if (task.needs && Array.isArray(task.needs)) {
+    task.needs.forEach(need => {
+      if (need.attachedFile?.path) {
+        filesToDelete.push(deleteFileFromStorage(need.attachedFile.path));
+      }
+    });
+  }
+  
+  await Promise.all(filesToDelete);
+}
+
+// Delete memo file on completion
+async function deleteMemoFile(task) {
+  if (task.memoFile?.path) {
+    await deleteFileFromStorage(task.memoFile.path);
+  }
+}
+
+// Delete need file on completion
+async function deleteNeedFile(need) {
+  if (need.attachedFile?.path) {
+    await deleteFileFromStorage(need.attachedFile.path);
+  }
+}
+
+// ========================================
+// PERMANENT FILE STORAGE
+// ========================================
+
+const filesCollection = collection(db, "permanentFiles");
+let permanentFiles = [];
+
+// Initialize permanent files listener
+function initPermanentFilesListener() {
+  const q = query(filesCollection, orderBy("uploadedAt", "desc"));
+  onSnapshot(q, (snapshot) => {
+    permanentFiles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderPermanentFiles();
+  });
+}
+
+function renderPermanentFiles() {
+  const container = document.getElementById("filesList");
+  if (!container) return;
+  
+  if (permanentFiles.length === 0) {
+    container.innerHTML = "<p class='no-files'>No files uploaded yet. Click 'Upload File' to add your first file.</p>";
+    return;
+  }
+  
+  container.innerHTML = permanentFiles.map(file => {
+    const uploadDate = file.uploadedAt?.seconds 
+      ? new Date(file.uploadedAt.seconds * 1000).toLocaleDateString() 
+      : 'Unknown date';
+    const fileSize = file.size ? (file.size / 1024).toFixed(2) + ' KB' : 'Unknown size';
+    
+    return `
+      <div class="file-card">
+        <div class="file-icon">${getFileIcon(file.type)}</div>
+        <div class="file-info">
+          <div class="file-name">${file.name}</div>
+          <div class="file-label">${file.label || 'No description'}</div>
+          ${file.taskAssociation ? `<div class="file-task-tag">📎 ${file.taskAssociation}</div>` : ''}
+          <div class="file-meta">
+            <span>${fileSize}</span> • 
+            <span>${uploadDate}</span> • 
+            <span>by ${file.uploadedBy}</span>
+          </div>
+        </div>
+        <div class="file-actions">
+          <a href="${file.url}" target="_blank" class="file-download-btn" title="Download">⬇️</a>
+          <button class="file-delete-btn" onclick="deletePermanentFile('${file.id}')" title="Delete">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getFileIcon(fileType) {
+  if (!fileType) return '📄';
+  if (fileType.startsWith('image/')) return '🖼️';
+  if (fileType.startsWith('video/')) return '🎥';
+  if (fileType.startsWith('audio/')) return '🎵';
+  if (fileType.includes('pdf')) return '📕';
+  if (fileType.includes('word') || fileType.includes('document')) return '📘';
+  if (fileType.includes('excel') || fileType.includes('spreadsheet')) return '📊';
+  if (fileType.includes('powerpoint') || fileType.includes('presentation')) return '📽️';
+  if (fileType.includes('zip') || fileType.includes('rar')) return '🗜️';
+  return '📄';
+}
+
+function openFileUploadModal() {
+  document.getElementById("fileUploadModal").style.display = "flex";
+  document.getElementById("fileLabel").value = "";
+  document.getElementById("fileTaskAssociation").value = "";
+  document.getElementById("permanentFileInput").value = "";
+  document.getElementById("fileUploadProgress").style.display = "none";
+}
+
+function closeFileUploadModal() {
+  document.getElementById("fileUploadModal").style.display = "none";
+}
+
+async function uploadPermanentFile() {
+  const fileInput = document.getElementById("permanentFileInput");
+  const label = document.getElementById("fileLabel").value.trim();
+  const taskAssociation = document.getElementById("fileTaskAssociation").value.trim();
+  
+  if (!fileInput.files[0]) {
+    alert('Please select a file to upload');
+    return;
+  }
+  
+  const file = fileInput.files[0];
+  const progressDiv = document.getElementById("fileUploadProgress");
+  const progressFill = document.getElementById("progressFill");
+  const progressText = document.getElementById("progressText");
+  
+  progressDiv.style.display = "block";
+  
+  try {
+    const path = `permanentFiles/${currentUser}/${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, path);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+    
+    uploadTask.on('state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        progressFill.style.width = progress + '%';
+        progressText.textContent = Math.round(progress) + '%';
+      },
+      (error) => {
+        console.error('Upload error:', error);
+        alert('Failed to upload file. Please try again.');
+        progressDiv.style.display = "none";
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        
+        // Save file metadata to Firestore
+        await addDoc(filesCollection, {
+          name: file.name,
+          label: label || file.name,
+          taskAssociation: taskAssociation,
+          url: downloadURL,
+          path: path,
+          size: file.size,
+          type: file.type,
+          uploadedBy: currentUser,
+          uploadedAt: new Date()
+        });
+        
+        closeFileUploadModal();
+        progressDiv.style.display = "none";
+      }
+    );
+  } catch (error) {
+    console.error('Error uploading permanent file:', error);
+    alert('Failed to upload file. Please try again.');
+    progressDiv.style.display = "none";
+  }
+}
+
+async function deletePermanentFile(fileId) {
+  if (!confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+    return;
+  }
+  
+  showLoading('Deleting file...');
+  
+  try {
+    const file = permanentFiles.find(f => f.id === fileId);
+    if (!file) throw new Error('File not found');
+    
+    // Delete from Storage
+    await deleteFileFromStorage(file.path);
+    
+    // Delete from Firestore
+    await deleteDoc(doc(db, "permanentFiles", fileId));
+    
+    hideLoading();
+  } catch (error) {
+    console.error('Error deleting permanent file:', error);
+    alert('Failed to delete file. Please try again.');
+    hideLoading();
+  }
 }
 

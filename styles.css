@@ -1225,6 +1225,53 @@ h1 {
   background: var(--bg);
 }
 
+/* ---------- Media Attachments ---------- */
+.memo-media, .need-media {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.memo-image, .need-image {
+  margin-bottom: 8px;
+}
+
+.memo-image img, .need-image img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 6px;
+  display: block;
+  object-fit: contain;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.memo-links, .need-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memo-links a, .need-links a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+
+.memo-links a:hover, .need-links a:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+
 /* ---------- Completion Modal ---------- */
 .modal-overlay {
   position: fixed;
@@ -1550,4 +1597,240 @@ h1 {
 .notification-detail strong {
   color: var(--text);
   font-weight: 600;
+}
+/* ---------- File Management Styles ---------- */
+.file-attachment-section, .file-upload-progress {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.file-attachment-section label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.file-preview {
+  margin-top: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  min-height: 40px;
+}
+
+.file-preview:empty::after {
+  content: 'No file selected';
+  font-style: italic;
+}
+
+.file-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.2s ease;
+}
+
+.file-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.file-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.file-task-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--bg);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin: 4px 0;
+}
+
+.file-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.file-download-btn, .file-delete-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.file-download-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+
+.file-delete-btn:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  transform: scale(1.1);
+}
+
+.file-upload-progress {
+  margin-top: 12px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #7c3aed);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.no-files {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.view-description {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: -10px 0 20px 0;
+}
+
+.add-file-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-file-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.task-file-attachment {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--bg);
+  border-radius: 8px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+}
+
+.file-info-compact {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name-small {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size-small {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.file-download-small {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.file-download-small:hover {
+  background: #1d4ed8;
+  transform: scale(1.1);
 }

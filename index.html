@@ -38,6 +38,10 @@
           <span class="nav-icon">📣</span>
           <span class="nav-text">Updates</span>
         </a></li>
+        <li><a href="#" class="nav-link" data-view="files">
+          <span class="nav-icon">📁</span>
+          <span class="nav-text">Files</span>
+        </a></li>
         <li><a href="#" class="nav-link" data-view="completed">
           <span class="nav-icon">🎉</span>
           <span class="nav-text">Completed</span>
@@ -121,6 +125,15 @@
         <h1>Updates Feed</h1>
         <section id="updatesList"></section>
       </div>
+
+      <div id="files-view" class="view">
+        <div class="view-header">
+          <h1>File Storage</h1>
+          <button class="add-file-btn" onclick="openFileUploadModal()">+ Upload File</button>
+        </div>
+        <p class="view-description">Store files permanently with labels and task associations</p>
+        <section id="filesList"></section>
+      </div>
     </main>
   </div>
 
@@ -152,6 +165,11 @@
           <option value="1month">In 1 month</option>
           <option value="2months">In 2 months</option>
         </select>
+      </div>
+      <div class="file-attachment-section">
+        <label>📎 Attach File (temporary - deleted on completion):</label>
+        <input type="file" id="taskFileInput" />
+        <div class="file-preview" id="taskFilePreview"></div>
       </div>
       <div class="modal-actions">
         <button onclick="addTask()">Add Task</button>
@@ -189,6 +207,32 @@
       <h2>Edit Memo</h2>
       <p id="memoTaskTitle"></p>
       <textarea id="memoText" placeholder="Enter detailed memo/description for this task..."></textarea>
+      
+      <div class="media-section">
+        <h4>📎 Attachments</h4>
+        <div class="media-inputs">
+          <div class="input-group">            <label>📄 File Upload (temporary - deleted on completion):</label>
+            <input type="file" id="needsFileInput" />
+            <div class="file-preview" id="needsFilePreview"></div>
+          </div>
+          <div class="input-group">            <label>📄 File Upload (temporary - deleted on completion):</label>
+            <input type="file" id="memoFileInput" />
+            <div class="file-preview" id="memoFilePreview"></div>
+          </div>
+          <div class="input-group">
+            <label for="memoImageUrl">Image URL:</label>
+            <input id="memoImageUrl" type="url" placeholder="https://example.com/image.jpg" />
+            <small>Or paste an image to upload:</small>
+            <div id="memoImagePreview" class="image-preview"></div>
+          </div>
+          <div class="input-group">
+            <label for="memoLinks">Links (one per line):</label>
+            <textarea id="memoLinks" rows="3" placeholder="Link text | https://example.com\nAnother link | https://..." style="min-height: 60px;"></textarea>
+            <small>Format: Link text | URL</small>
+          </div>
+        </div>
+      </div>
+      
       <div class="modal-actions">
         <button onclick="saveMemo()">Save Memo</button>
         <button class="secondary" onclick="closeMemoModal()">Cancel</button>
@@ -210,6 +254,23 @@
           <li>If no priority specified, defaults to medium</li>
         </ul>
       </div>
+      
+      <div class="media-section">
+        <h4>📎 Attachments for Needs</h4>
+        <div class="media-inputs">
+          <div class="input-group">
+            <label for="needsImageUrl">Image URL:</label>
+            <input id="needsImageUrl" type="url" placeholder="https://example.com/image.jpg" />
+            <div id="needsImagePreview" class="image-preview"></div>
+          </div>
+          <div class="input-group">
+            <label for="needsLinks">Links (one per line):</label>
+            <textarea id="needsLinks" rows="3" placeholder="Link text | https://example.com\nAnother link | https://..." style="min-height: 60px;"></textarea>
+            <small>Format: Link text | URL</small>
+          </div>
+        </div>
+      </div>
+      
       <div class="modal-actions">
         <button onclick="saveNeeds()">Save Needs</button>
         <button class="secondary" onclick="closeNeedsModal()">Cancel</button>
@@ -268,6 +329,25 @@
       <div class="modal-actions">
         <button onclick="saveAttachment()">Add Link</button>
         <button class="secondary" onclick="closeAttachmentModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fileUploadModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Upload Permanent File</h2>
+      <input id="fileLabel" placeholder="File label/description" />
+      <input id="fileTaskAssociation" placeholder="Related task (optional)" />
+      <input type="file" id="permanentFileInput" />
+      <div class="file-upload-progress" id="fileUploadProgress" style="display: none;">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <span class="progress-text" id="progressText">0%</span>
+      </div>
+      <div class="modal-actions">
+        <button onclick="uploadPermanentFile()">Upload</button>
+        <button class="secondary" onclick="closeFileUploadModal()">Cancel</button>
       </div>
     </div>
   </div>
