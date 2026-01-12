@@ -50,6 +50,35 @@ window.sendMessage = sendMessage;
 window.clearAllNotifications = clearAllNotifications;
 
 // -----------------------------
+// Loading Indicator Functions
+// -----------------------------
+let loadingTimeout;
+let activeOperations = 0;
+
+function showLoading(message = 'Syncing data...') {
+  activeOperations++;
+  const indicator = document.getElementById('loadingIndicator');
+  const text = indicator?.querySelector('.loading-text');
+  if (indicator) {
+    indicator.classList.add('visible');
+    if (text) text.textContent = message;
+  }
+}
+
+function hideLoading() {
+  activeOperations = Math.max(0, activeOperations - 1);
+  if (activeOperations === 0) {
+    clearTimeout(loadingTimeout);
+    loadingTimeout = setTimeout(() => {
+      const indicator = document.getElementById('loadingIndicator');
+      if (indicator) {
+        indicator.classList.remove('visible');
+      }
+    }, 300); // Small delay for smooth UX
+  }
+}
+
+// -----------------------------
 // Global state
 // -----------------------------
 let currentUser = null;
@@ -163,6 +192,8 @@ function handlePriorityChange() {
 
 // -----------------------------
 async function addTask() {
+  showLoading('Creating task...');
+  
   const title = document.getElementById("taskTitle").value.trim();
   const description = document.getElementById("taskDescription").value.trim();
   const notes = document.getElementById("taskNotes").value.trim();
@@ -268,19 +299,23 @@ async function addTask() {
   }
 
   closeAddTaskModal();
+  hideLoading();
 }
 
 // -----------------------------
 async function toggleDone(id) {
+  showLoading('Updating task...');
   const task = tasks.find((t) => t.id === id);
   const taskDoc = doc(db, "tasks", id);
 
   if (!task.done) {
     // If marking as complete, show the modal
+    hideLoading();
     openCompletionModal(id);
   } else {
     // If un-checking, mark as incomplete immediately
     await updateDoc(taskDoc, { done: false, completionNotes: "" });
+    hideLoading();
   }
 }
 
@@ -303,6 +338,7 @@ function closeCompletionModal() {
 async function saveCompletionDetails() {
   if (!taskToCompleteId) return;
 
+  showLoading('Completing task...');
   const task = tasks.find(t => t.id === taskToCompleteId);
   const notes = document.getElementById("completionNotes").value.trim();
   const taskDoc = doc(db, "tasks", taskToCompleteId);
@@ -325,6 +361,7 @@ async function saveCompletionDetails() {
   });
 
   closeCompletionModal();
+  hideLoading();
 }
 
 
@@ -348,6 +385,7 @@ function closeUpdateModal() {
 async function saveUpdate() {
   if (!taskToUpdateId) return;
 
+  showLoading('Posting update...');
   const task = tasks.find(t => t.id === taskToUpdateId);
   const taskDoc = doc(db, "tasks", taskToUpdateId);
   const updateText = document.getElementById("updateText").value.trim();
@@ -373,6 +411,7 @@ async function saveUpdate() {
   });
   
   closeUpdateModal();
+  hideLoading();
 }
 
 // -----------------------------
@@ -395,6 +434,7 @@ function closeMemoModal() {
 async function saveMemo() {
   if (!taskToEditMemoId) return;
 
+  showLoading('Saving memo...');
   const task = tasks.find(t => t.id === taskToEditMemoId);
   const memoText = document.getElementById("memoText").value.trim();
   const taskDoc = doc(db, "tasks", taskToEditMemoId);
@@ -417,6 +457,7 @@ async function saveMemo() {
   });
 
   closeMemoModal();
+  hideLoading();
 }
 
 // -----------------------------
@@ -439,12 +480,14 @@ function closeAttachmentModal() {
 async function saveAttachment() {
   if (!taskToAddAttachmentId) return;
 
+  showLoading('Adding link...');
   const task = tasks.find(t => t.id === taskToAddAttachmentId);
   const name = document.getElementById("attachmentName").value.trim();
   const url = document.getElementById("attachmentUrl").value.trim();
 
   if (!name || !url) {
     alert("Please provide both a name and URL");
+    hideLoading();
     return;
   }
 
@@ -533,6 +576,7 @@ function closeNeedsModal() {
 async function saveNeeds() {
   if (!taskToEditNeedsId) return;
 
+  showLoading('Saving needs...');
   const needsText = document.getElementById("needsText").value.trim();
   
   // Parse needs with priority tags [high], [medium], [low]
@@ -588,12 +632,14 @@ async function saveNeeds() {
   });
 
   closeNeedsModal();
+  hideLoading();
 }
 
 // -----------------------------
 // Priority Change Functions
 // -----------------------------
 async function changeTaskPriority(taskId) {
+  showLoading('Updating priority...');
   const task = tasks.find(t => t.id === taskId);
   const currentPriority = task.priority || "medium";
   
@@ -608,9 +654,15 @@ async function changeTaskPriority(taskId) {
   if (newPriority === "1") selectedPriority = "low";
   else if (newPriority === "2") selectedPriority = "medium";
   else if (newPriority === "3") selectedPriority = "high";
-  else return;
+  else {
+    hideLoading();
+    return;
+  }
   
-  if (selectedPriority === currentPriority) return;
+  if (selectedPriority === currentPriority) {
+    hideLoading();
+    return;
+  }
   
   const taskDoc = doc(db, "tasks", taskId);
   await updateDoc(taskDoc, { priority: selectedPriority });
@@ -625,13 +677,18 @@ async function changeTaskPriority(taskId) {
     recipient: recipient,
     sender: currentUser,
   });
+  hideLoading();
 }
 
 async function changeNeedPriority(taskId, needIndex) {
+  showLoading('Updating need priority...');
   const task = tasks.find(t => t.id === taskId);
   const needs = [...(task.needs || [])];
   
-  if (!needs[needIndex]) return;
+  if (!needs[needIndex]) {
+    hideLoading();
+    return;
+  }
   
   // Normalize the need to an object if it's currently just a string
   if (typeof needs[needIndex] === 'string') {
@@ -650,9 +707,15 @@ async function changeNeedPriority(taskId, needIndex) {
   if (newPriority === "1") selectedPriority = "low";
   else if (newPriority === "2") selectedPriority = "medium";
   else if (newPriority === "3") selectedPriority = "high";
-  else return;
+  else {
+    hideLoading();
+    return;
+  }
   
-  if (selectedPriority === currentPriority) return;
+  if (selectedPriority === currentPriority) {
+    hideLoading();
+    return;
+  }
   
   needs[needIndex].priority = selectedPriority;
   
@@ -669,6 +732,7 @@ async function changeNeedPriority(taskId, needIndex) {
     recipient: recipient,
     sender: currentUser,
   });
+  hideLoading();
 }
 
 // -----------------------------
@@ -837,6 +901,7 @@ async function sendMessage() {
     return;
   }
   
+  showLoading('Sending message...');
   const recipient = currentUser === "Nate" ? "Craig" : "Nate";
   
   try {
@@ -1359,6 +1424,7 @@ function scheduleDeadlineCheck() {
 function initializeApp() {
   if (!currentUser) return;
 
+  showLoading('Loading tasks...');
   const q = query(tasksCollection, orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
     // Filter tasks for current user
@@ -1377,11 +1443,14 @@ function initializeApp() {
     
     // Check for deadline notifications
     scheduleDeadlineCheck();
+    hideLoading();
   }, (error) => {
     console.log("Error fetching tasks:", error);
+    hideLoading();
   });
 
   // Listen for all notifications for current user
+  showLoading('Loading notifications...');
   const notificationsQuery = query(
     notificationsCollection,
     where("recipient", "==", currentUser),
@@ -1407,8 +1476,10 @@ function initializeApp() {
 
     // Render with unread first, then read
     renderNotifications([...unreadDocs, ...readDocs]);
+    hideLoading();
   }, (error) => {
     console.log("Error fetching notifications:", error);
+    hideLoading();
     console.log("If you see an index error, please create the composite index in Firebase Console");
     console.log("Or check the error message for a direct link to create it");
   });
