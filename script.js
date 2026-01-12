@@ -62,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
           view.classList.remove("active");
         }
       });
-    }, { passive: true });
+    }, { passive: false });
   });
   
   // Add passive listeners to text inputs to suppress warnings
@@ -264,9 +264,14 @@ async function changeTaskPriority(taskId) {
 
 async function changeNeedPriority(taskId, needIndex) {
   const task = tasks.find(t => t.id === taskId);
-  const needs = task.needs || [];
+  const needs = [...(task.needs || [])];
   
   if (!needs[needIndex]) return;
+  
+  // Normalize the need to an object if it's currently just a string
+  if (typeof needs[needIndex] === 'string') {
+    needs[needIndex] = { text: needs[needIndex], priority: 'medium' };
+  }
   
   const currentPriority = needs[needIndex].priority || "medium";
   const priorityNames = { low: "🟢 Low", medium: "🟡 Medium", high: "🔴 High" };
