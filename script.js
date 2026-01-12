@@ -627,7 +627,9 @@ function formatNotificationType(type) {
     update: "Task Update",
     completion: "Task Completed",
     priority_change: "Priority Changed",
+    priority_auto_escalated: "Priority Auto-Escalated",
     need_priority_change: "Need Priority Changed",
+    needs_updated: "Needs Updated",
     deadline_warning: "Deadline Warning",
     deadline_today: "Due Today",
     deadline_overdue: "Overdue",
@@ -977,7 +979,7 @@ function renderNotifications(docs) {
     let notificationClass = `notification-item ${!notification.read ? "unread" : "read"}`;
     if (notification.type === "deadline_today" || notification.type === "deadline_overdue") {
       notificationClass += " notification-urgent";
-    } else if (notification.type === "deadline_warning") {
+    } else if (notification.type === "deadline_warning" || notification.type === "priority_auto_escalated") {
       notificationClass += " notification-warning";
     } else if (notification.type === "message") {
       notificationClass += " notification-message";
@@ -1026,6 +1028,44 @@ async function checkDeadlineNotifications() {
     
     // Initialize notificationsSent if it doesn't exist
     const notificationsSent = task.notificationsSent || {};
+    
+    // AUTO-ESCALATE PRIORITY BASED ON DEADLINE PROXIMITY
+    const currentPriority = task.priority || "medium";
+    let newPriority = currentPriority;
+    
+    // Low → Medium when 7 days or less remain
+    if (currentPriority === "low" && daysUntil <= 7) {
+      newPriority = "medium";
+    }
+    // Medium → High when 3 days or less remain
+    else if (currentPriority === "medium" && daysUntil <= 3) {
+      newPriority = "high";
+    }
+    // Low → High when 2 days or less remain (skip medium)
+    else if (currentPriority === "low" && daysUntil <= 2) {
+      newPriority = "high";
+    }
+    
+    // Update priority if it changed
+    if (newPriority !== currentPriority) {
+      const taskDoc = doc(db, "tasks", task.id);
+      await updateDoc(taskDoc, { priority: newPriority });
+      
+      const priorityNames = { low: "🟢 Low", medium: "🟡 Medium", high: "🔴 High" };
+      const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+      
+      await addDoc(notificationsCollection, {
+        type: "priority_auto_escalated",
+        taskId: task.id,
+        message: `⚡ Priority auto-escalated: "${task.title}" is now ${priorityNames[newPriority]} (deadline in ${daysUntil} day${daysUntil !== 1 ? 's' : ''})`,
+        createdAt: new Date(),
+        read: false,
+        recipient: task.owner || currentUser,
+        sender: "system",
+      });
+      
+      console.log(`⚡ Auto-escalated "${task.title}" from ${currentPriority} to ${newPriority}`);
+    }
     
     // Check if deadline is tomorrow and notification not sent
     if (daysUntil === 1 && !notificationsSent.oneDayBefore) {
