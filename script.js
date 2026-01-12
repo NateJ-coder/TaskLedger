@@ -257,16 +257,23 @@ async function toggleNotificationsPanel() {
   const isOpen = panel.classList.toggle("open");
 
   if (isOpen) {
-    const unreadQuery = query(
-      notificationsCollection,
-      where("read", "==", false)
-    );
-    const unread = await getDocs(unreadQuery);
-    unread.forEach(async (docSnap) => {
-      await updateDoc(doc(db, "notifications", docSnap.id), {
-        read: true
-      });
+    // Mark all unread notifications as read
+    const allNotificationsQuery = query(notificationsCollection);
+    const snapshot = await getDocs(allNotificationsQuery);
+    
+    const updatePromises = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.read === false) {
+        updatePromises.push(
+          updateDoc(doc(db, "notifications", docSnap.id), { read: true })
+        );
+      }
     });
+    
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
+    }
   }
 }
 
@@ -508,18 +515,22 @@ onSnapshot(q, (snapshot) => {
   renderMemos(tasks); // Memos view shows all tasks with descriptions
   renderNeeds(activeTasks);
   renderCompleted(completedTasks);
+}, (error) => {
+  console.log("Error fetching tasks:", error);
 });
 
-// Listen for unread notifications
-const unreadQuery = query(
+// Listen for all notifications (we'll filter unread in the render function)
+const notificationsQuery = query(
   notificationsCollection,
-  where("read", "==", false),
   orderBy("createdAt", "desc")
 );
 
-onSnapshot(unreadQuery, (snapshot) => {
-  const count = snapshot.size;
+onSnapshot(notificationsQuery, (snapshot) => {
+  const allNotifications = snapshot.docs;
+  const unreadDocs = allNotifications.filter(doc => !doc.data().read);
+  
   const badge = document.getElementById("notificationBadge");
+  const count = unreadDocs.length;
 
   if (count > 0) {
     badge.textContent = count;
@@ -528,6 +539,8 @@ onSnapshot(unreadQuery, (snapshot) => {
     badge.style.display = "none";
   }
 
-  renderNotifications(snapshot.docs);
+  renderNotifications(unreadDocs);
+}, (error) => {
+  console.log("Error fetching notifications:", error);
 });
 
