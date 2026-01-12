@@ -26,7 +26,8 @@ window.openUpdateModal = openUpdateModal;
 window.closeUpdateModal = closeUpdateModal;
 window.saveUpdate = saveUpdate;
 window.toggleNotificationsPanel = toggleNotificationsPanel;
-window.changePriority = changePriority;
+window.changeTaskPriority = changeTaskPriority;
+window.changeNeedPriority = changeNeedPriority;
 window.navigateToTask = navigateToTask;
 
 // -----------------------------
@@ -61,7 +62,13 @@ document.addEventListener("DOMContentLoaded", () => {
           view.classList.remove("active");
         }
       });
-    });
+    }, { passive: true });
+  });
+  
+  // Add passive listeners to text inputs to suppress warnings
+  document.querySelectorAll('input, textarea').forEach(element => {
+    element.addEventListener('wheel', (e) => {}, { passive: true });
+    element.addEventListener('touchstart', (e) => {}, { passive: true });
   });
 });
 
@@ -88,7 +95,15 @@ async function addTask() {
   const notes = document.getElementById("taskNotes").value.trim();
   const needsText = document.getElementById("taskNeeds").value.trim();
   const priority = document.getElementById("taskPriority").value;
-  const needs = needsText ? needsText.split('\n').map(n => n.trim()).filter(n => n) : [];
+  
+  // Convert needs to objects with text and priority
+  const needs = needsText 
+    ? needsText.split('\n').map(n => n.trim()).filter(n => n).map(text => ({
+        text,
+        priority: 'medium',
+        createdAt: new Date()
+      }))
+    : [];
 
   const newTask = await addDoc(tasksCollection, {
     title,
@@ -214,17 +229,16 @@ async function saveUpdate() {
 }
 
 // -----------------------------
-// Priority Change Function
+// Priority Change Functions
 // -----------------------------
-async function changePriority(taskId) {
+async function changeTaskPriority(taskId) {
   const task = tasks.find(t => t.id === taskId);
   const currentPriority = task.priority || "medium";
   
-  const priorities = ["low", "medium", "high"];
   const priorityNames = { low: "🟢 Low", medium: "🟡 Medium", high: "🔴 High" };
   
   const newPriority = prompt(
-    `Current priority: ${priorityNames[currentPriority]}\n\nSelect new priority:\n1 - 🟢 Low\n2 - 🟡 Medium\n3 - 🔴 High\n\nEnter 1, 2, or 3:`,
+    `Current TASK priority: ${priorityNames[currentPriority]}\n\nSelect new priority:\n1 - 🟢 Low\n2 - 🟡 Medium\n3 - 🔴 High\n\nEnter 1, 2, or 3:`,
     currentPriority === "low" ? "1" : currentPriority === "medium" ? "2" : "3"
   );
   
@@ -232,18 +246,53 @@ async function changePriority(taskId) {
   if (newPriority === "1") selectedPriority = "low";
   else if (newPriority === "2") selectedPriority = "medium";
   else if (newPriority === "3") selectedPriority = "high";
-  else return; // Cancelled or invalid input
+  else return;
   
   if (selectedPriority === currentPriority) return;
   
   const taskDoc = doc(db, "tasks", taskId);
   await updateDoc(taskDoc, { priority: selectedPriority });
   
-  // Create notification for priority change
   await addDoc(notificationsCollection, {
     type: "priority_change",
     taskId: taskId,
     message: `Task priority changed: "${task.title}" is now ${priorityNames[selectedPriority]}`,
+    createdAt: new Date(),
+    read: false,
+  });
+}
+
+async function changeNeedPriority(taskId, needIndex) {
+  const task = tasks.find(t => t.id === taskId);
+  const needs = task.needs || [];
+  
+  if (!needs[needIndex]) return;
+  
+  const currentPriority = needs[needIndex].priority || "medium";
+  const priorityNames = { low: "🟢 Low", medium: "🟡 Medium", high: "🔴 High" };
+  
+  const newPriority = prompt(
+    `Current NEED priority: ${priorityNames[currentPriority]}\n\nSelect new priority:\n1 - 🟢 Low\n2 - 🟡 Medium\n3 - 🔴 High\n\nEnter 1, 2, or 3:`,
+    currentPriority === "low" ? "1" : currentPriority === "medium" ? "2" : "3"
+  );
+  
+  let selectedPriority;
+  if (newPriority === "1") selectedPriority = "low";
+  else if (newPriority === "2") selectedPriority = "medium";
+  else if (newPriority === "3") selectedPriority = "high";
+  else return;
+  
+  if (selectedPriority === currentPriority) return;
+  
+  needs[needIndex].priority = selectedPriority;
+  
+  const taskDoc = doc(db, "tasks", taskId);
+  await updateDoc(taskDoc, { needs });
+  
+  await addDoc(notificationsCollection, {
+    type: "need_priority_change",
+    taskId: taskId,
+    message: `Need priority changed in "${task.title}" to ${priorityNames[selectedPriority]}`,
     createdAt: new Date(),
     read: false,
   });
@@ -345,7 +394,7 @@ function renderTasks(tasksToRender) {
       <div class="task-actions">
         <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
         ${task.description ? `<button onclick="jumpTo('memo', '${task.id}')">📝 View Memo</button>` : ""}
-        <button class="priority-change-btn" onclick="changePriority('${task.id}')">🚩 Change Priority</button>
+        <button class="priority-change-btn" onclick="changeTaskPriority('${task.id}')">🚩 Change Task Priority</button>
       </div>
     `;
     container.appendChild(div);
@@ -414,22 +463,51 @@ function renderMemos(tasksToRender) {
 function renderNeeds(tasksToRender) {
   const container = document.getElementById("needsList");
   container.innerHTML = "";
+  
+  // Collect all needs with task context and sort by priority
+  const allNeeds = [];
   tasksToRender
-    .filter(task => {
-      if (task.done) return false;
-      const needs = Array.isArray(task.needs) ? task.needs : (task.needs ? [task.needs] : []);
-      return needs.length > 0;
-    })
+    .filter(task => !task.done)
     .forEach((task) => {
-      const div = document.createElement("div");
-      div.className = "needs-card";
-      const needs = Array.isArray(task.needs) ? task.needs : (task.needs ? [task.needs] : []);
-      div.innerHTML = `
-        <div class="task-link" onclick="jumpTo('task', '${task.id}')">From task: ${task.title}</div>
-        <ul>${needs.map((n) => `<li>${n}</li>`).join("")}</ul>
-      `;
-      container.appendChild(div);
+      const needs = Array.isArray(task.needs) ? task.needs : [];
+      needs.forEach((need, index) => {
+        // Handle old format (string) and new format (object)
+        const needObj = typeof need === 'string' ? { text: need, priority: 'medium' } : need;
+        allNeeds.push({
+          ...needObj,
+          taskId: task.id,
+          taskTitle: task.title,
+          needIndex: index
+        });
+      });
     });
+  
+  if (allNeeds.length === 0) {
+    container.innerHTML = "<p style='color: var(--muted);'>No needs yet.</p>";
+    return;
+  }
+  
+  // Sort by priority
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  allNeeds.sort((a, b) => priorityOrder[a.priority || 'medium'] - priorityOrder[b.priority || 'medium']);
+  
+  allNeeds.forEach((need) => {
+    const div = document.createElement("div");
+    div.className = "needs-card";
+    const priority = need.priority || 'medium';
+    const priorityEmoji = priority === "high" ? "🔴" : priority === "medium" ? "🟡" : "🟢";
+    const priorityLabel = priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low";
+    
+    div.innerHTML = `
+      <div class="need-header">
+        <div class="task-link" onclick="jumpTo('task', '${need.taskId}')">From task: ${need.taskTitle}</div>
+        <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
+      </div>
+      <div class="need-text">${need.text}</div>
+      <button class="priority-change-btn" onclick="changeNeedPriority('${need.taskId}', ${need.needIndex})">🚩 Change Need Priority</button>
+    `;
+    container.appendChild(div);
+  });
 }
 
 function renderCompleted(tasksToRender) {

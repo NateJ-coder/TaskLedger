@@ -330,6 +330,13 @@ body {
   border-color: var(--accent);
 }
 
+.priority-note {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 8px 0 0 0;
+  font-style: italic;
+}
+
 .nav-links li {
   margin-bottom: 8px;
 }
@@ -563,6 +570,31 @@ h1 {
 .needs-card .task-link {
   font-size: 0.8rem;
   color: var(--muted);
+  cursor: pointer;
+}
+
+.needs-card .task-link:hover {
+  text-decoration: underline;
+}
+
+.need-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.need-text {
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 12px;
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+.needs-card button {
+  width: 100%;
+  margin-top: 8px;
 }
 
 /* ---------- Completion Modal ---------- */

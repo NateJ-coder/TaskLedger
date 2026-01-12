@@ -92,12 +92,13 @@
       <textarea id="taskNotes" placeholder="Private notes (not part of the memo)"></textarea>
       <textarea id="taskNeeds" placeholder="What I need from you (one per line)"></textarea>
       <div class="priority-selector">
-        <label for="taskPriority">Priority Level:</label>
+        <label for="taskPriority">Task Priority (for boss to manage):</label>
         <select id="taskPriority">
           <option value="high">🔴 High - Urgent</option>
           <option value="medium" selected>🟡 Medium - Moderate</option>
           <option value="low">🟢 Low - Can wait</option>
         </select>
+        <p class="priority-note">💡 Note: Each need can have its own priority flag that you can set in the Needs view</p>
       </div>
       <div class="modal-actions">
         <button onclick="addTask()">Add Task</button>
