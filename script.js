@@ -458,6 +458,20 @@ async function saveNeeds() {
     needs: needs,
   });
 
+  // Send notification to the other user about needs update
+  const task = tasks.find(t => t.id === taskToEditNeedsId);
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  
+  await addDoc(notificationsCollection, {
+    type: "needs_updated",
+    taskId: taskToEditNeedsId,
+    message: `${currentUser} updated needs for "${task.title}"`,
+    createdAt: new Date(),
+    read: false,
+    recipient: recipient,
+    sender: currentUser,
+  });
+
   closeNeedsModal();
 }
 
