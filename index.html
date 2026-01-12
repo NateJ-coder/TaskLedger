@@ -57,6 +57,10 @@
         <span class="notification-icon">🔔</span>
         <span class="notification-badge" id="notificationBadge" style="display: none;" aria-live="polite">0</span>
       </button>
+      <button class="completed-bin-trigger" onclick="toggleCompletedBin()" aria-label="Open completed items bin" title="Completed Items">
+        <span class="bin-icon">🗑️</span>
+        <span class="bin-badge" id="completedBinBadge" style="display: none;">0</span>
+      </button>
     </nav>
 
     <aside class="notifications-panel" id="notificationsPanel" role="complementary" aria-label="Notifications">
@@ -69,6 +73,23 @@
       </div>
       <div class="notifications-body" id="notificationsList" role="list">
         <p class="no-notifications">No new notifications</p>
+      </div>
+    </aside>
+
+    <aside class="completed-bin-panel" id="completedBinPanel" role="complementary" aria-label="Completed Items">
+      <div class="bin-header">
+        <h3>📦 Completed Items</h3>
+        <button class="close-bin" onclick="toggleCompletedBin()" aria-label="Close completed bin">✕</button>
+      </div>
+      <div class="bin-body">
+        <div class="bin-section">
+          <h4>Completed Memos</h4>
+          <div id="completedMemosList" class="completed-items-list"></div>
+        </div>
+        <div class="bin-section">
+          <h4>Completed Needs</h4>
+          <div id="completedNeedsList" class="completed-items-list"></div>
+        </div>
       </div>
     </aside>
 
@@ -220,6 +241,22 @@
 
   <div id="sentConfirmation" class="sent-confirmation">
     Message sent! ✓
+  </div>
+
+  <div id="needCompletionModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Complete Need</h2>
+      <p id="needCompletionTaskTitle" style="color: var(--muted); margin-bottom: 8px;"></p>
+      <div class="need-completion-text" id="needCompletionText" style="padding: 12px; background: var(--bg); border-radius: 6px; margin-bottom: 16px;"></div>
+      <label for="needCompletionNote" style="display: block; margin-bottom: 6px; font-weight: 600;">Completion Notes:</label>
+      <textarea id="needCompletionNote" placeholder="Add details about how this need was fulfilled..." rows="4"></textarea>
+      <label for="needCompletionLink" style="display: block; margin-bottom: 6px; margin-top: 12px; font-weight: 600;">Related Link (optional):</label>
+      <input id="needCompletionLink" placeholder="https://..." type="url" />
+      <div class="modal-actions">
+        <button onclick="saveNeedCompletion()">Mark Complete</button>
+        <button class="secondary" onclick="closeNeedCompletionModal()">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <div id="attachmentModal" class="modal-overlay">

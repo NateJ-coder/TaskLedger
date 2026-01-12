@@ -50,6 +50,10 @@ window.sendMessage = sendMessage;
 window.clearAllNotifications = clearAllNotifications;
 window.toggleMemoComplete = toggleMemoComplete;
 window.toggleNeedComplete = toggleNeedComplete;
+window.toggleCompletedBin = toggleCompletedBin;
+window.openNeedCompletionModal = openNeedCompletionModal;
+window.closeNeedCompletionModal = closeNeedCompletionModal;
+window.saveNeedCompletion = saveNeedCompletion;
 
 // -----------------------------
 // Loading Indicator Functions
@@ -92,6 +96,8 @@ let taskToUpdateId = null;
 let taskToEditMemoId = null;
 let taskToEditNeedsId = null;
 let taskToAddAttachmentId = null;
+let needToCompleteTaskId = null;
+let needToCompleteIndex = null;
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
 const messagesCollection = collection(db, "messages");
@@ -751,6 +757,17 @@ function toggleNotificationsPanel() {
   }
 }
 
+// Completed Bin Panel
+function toggleCompletedBin() {
+  const panel = document.getElementById("completedBinPanel");
+  panel.classList.toggle("open");
+  
+  // Render completed items when opened
+  if (panel.classList.contains("open")) {
+    renderCompletedBin();
+  }
+}
+
 async function markNotificationRead(notificationId) {
   if (notificationId) {
     try {
@@ -855,6 +872,10 @@ function formatNotificationType(type) {
     need_priority_change: "Need Priority Changed",
     needs_updated: "Needs Updated",
     memo_updated: "Memo Updated",
+    memo_completed: "Memo Completed",
+    memo_uncompleted: "Memo Restored",
+    need_completed: "Need Completed",
+    need_uncompleted: "Need Restored",
     attachment_added: "Link Added",
     attachment_removed: "Link Removed",
     deadline_warning: "Deadline Warning",
@@ -1106,33 +1127,155 @@ async function toggleMemoComplete(taskId) {
   
   const newStatus = !task.memoCompleted;
   await updateDoc(taskDoc, { memoCompleted: newStatus });
+  
+  // Send notification
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  try {
+    await addDoc(notificationsCollection, {
+      type: newStatus ? "memo_completed" : "memo_uncompleted",
+      taskId: taskId,
+      message: `${currentUser} ${newStatus ? 'completed' : 'uncompleted'} memo for "${task.title}"`,
+      createdAt: new Date(),
+      read: false,
+      recipient: recipient,
+      sender: currentUser,
+    });
+  } catch (error) {
+    console.error("Error creating notification:", error);
+  }
+  
   hideLoading();
 }
 
 // Toggle need complete status
 async function toggleNeedComplete(taskId, needIndex) {
-  showLoading('Updating need...');
   const task = tasks.find(t => t.id === taskId);
-  const taskDoc = doc(db, "tasks", taskId);
+  const needs = [...(task.needs || [])];
+  
+  if (!needs[needIndex]) return;
+  
+  // Ensure need is an object
+  if (typeof needs[needIndex] === 'string') {
+    needs[needIndex] = { text: needs[needIndex], priority: 'medium', completed: false };
+  }
+  
+  const isCurrentlyCompleted = needs[needIndex].completed || false;
+  
+  if (isCurrentlyCompleted) {
+    // Uncompleting - just toggle it back
+    showLoading('Updating need...');
+    needs[needIndex].completed = false;
+    needs[needIndex].completionNote = null;
+    needs[needIndex].completionLink = null;
+    const taskDoc = doc(db, "tasks", taskId);
+    await updateDoc(taskDoc, { needs });
+    
+    // Send notification
+    const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+    try {
+      await addDoc(notificationsCollection, {
+        type: "need_uncompleted",
+        taskId: taskId,
+        message: `${currentUser} uncompleted need in "${task.title}"`,
+        createdAt: new Date(),
+        read: false,
+        recipient: recipient,
+        sender: currentUser,
+      });
+    } catch (error) {
+      console.error("Error creating notification:", error);
+    }
+    hideLoading();
+  } else {
+    // Completing - show modal for notes
+    openNeedCompletionModal(taskId, needIndex);
+  }
+}
+
+// Open need completion modal
+function openNeedCompletionModal(taskId, needIndex) {
+  const task = tasks.find(t => t.id === taskId);
+  const needs = task.needs || [];
+  const need = needs[needIndex];
+  const needText = typeof need === 'string' ? need : need.text;
+  
+  needToCompleteTaskId = taskId;
+  needToCompleteIndex = needIndex;
+  
+  document.getElementById("needCompletionTaskTitle").textContent = `Completing need from: ${task.title}`;
+  document.getElementById("needCompletionText").textContent = needText;
+  document.getElementById("needCompletionNote").value = "";
+  document.getElementById("needCompletionLink").value = "";
+  document.getElementById("needCompletionModal").style.display = "flex";
+}
+
+// Close need completion modal
+function closeNeedCompletionModal() {
+  document.getElementById("needCompletionModal").style.display = "none";
+  document.getElementById("needCompletionNote").value = "";
+  document.getElementById("needCompletionLink").value = "";
+  needToCompleteTaskId = null;
+  needToCompleteIndex = null;
+  
+  // Uncheck the checkbox since user cancelled
+  renderNeeds(tasks.filter(t => !t.done));
+}
+
+// Save need completion
+async function saveNeedCompletion() {
+  if (!needToCompleteTaskId || needToCompleteIndex === null) return;
+  
+  showLoading('Completing need...');
+  const task = tasks.find(t => t.id === needToCompleteTaskId);
+  const note = document.getElementById("needCompletionNote").value.trim();
+  const link = document.getElementById("needCompletionLink").value.trim();
   
   const needs = [...(task.needs || [])];
-  if (needs[needIndex]) {
-    // Ensure need is an object
-    if (typeof needs[needIndex] === 'string') {
-      needs[needIndex] = { text: needs[needIndex], priority: 'medium', completed: false };
-    }
-    needs[needIndex].completed = !needs[needIndex].completed;
-    
-    await updateDoc(taskDoc, { needs });
+  if (typeof needs[needToCompleteIndex] === 'string') {
+    needs[needToCompleteIndex] = { text: needs[needToCompleteIndex], priority: 'medium' };
   }
+  
+  needs[needToCompleteIndex].completed = true;
+  needs[needToCompleteIndex].completionNote = note;
+  needs[needToCompleteIndex].completionLink = link;
+  needs[needToCompleteIndex].completedAt = new Date();
+  needs[needToCompleteIndex].completedBy = currentUser;
+  
+  const taskDoc = doc(db, "tasks", needToCompleteTaskId);
+  await updateDoc(taskDoc, { needs });
+  
+  // Send notification
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  let notificationMessage = `${currentUser} completed need in "${task.title}": ${needs[needToCompleteIndex].text}`;
+  if (note) {
+    notificationMessage += ` - Note: ${note.substring(0, 50)}${note.length > 50 ? '...' : ''}`;
+  }
+  
+  try {
+    await addDoc(notificationsCollection, {
+      type: "need_completed",
+      taskId: needToCompleteTaskId,
+      message: notificationMessage,
+      createdAt: new Date(),
+      read: false,
+      recipient: recipient,
+      sender: currentUser,
+    });
+  } catch (error) {
+    console.error("Error creating notification:", error);
+  }
+  
+  closeNeedCompletionModal();
   hideLoading();
 }
 
 function renderMemos(tasksToRender) {
   const container = document.getElementById("memoList");
   container.innerHTML = "";
+  
+  // Filter out completed memos
   tasksToRender
-    .filter(task => task.description)
+    .filter(task => task.description && !task.memoCompleted)
     .forEach((task) => {
       const div = document.createElement("div");
       div.className = "memo";
@@ -1165,12 +1308,15 @@ function renderNeeds(tasksToRender) {
       needs.forEach((need, index) => {
         // Handle old format (string) and new format (object)
         const needObj = typeof need === 'string' ? { text: need, priority: 'medium' } : need;
-        allNeeds.push({
-          ...needObj,
-          taskId: task.id,
-          taskTitle: task.title,
-          needIndex: index
-        });
+        // Only show non-completed needs
+        if (!needObj.completed) {
+          allNeeds.push({
+            ...needObj,
+            taskId: task.id,
+            taskTitle: task.title,
+            needIndex: index
+          });
+        }
       });
     });
   
@@ -1218,6 +1364,85 @@ function renderCompleted(tasksToRender) {
     `;
     container.appendChild(div);
   });
+}
+
+// Render completed bin
+function renderCompletedBin() {
+  // Render completed memos
+  const memosContainer = document.getElementById("completedMemosList");
+  const completedMemos = tasks.filter(t => t.memoCompleted && t.description);
+  
+  if (completedMemos.length === 0) {
+    memosContainer.innerHTML = "<p class='no-items'>No completed memos</p>";
+  } else {
+    memosContainer.innerHTML = completedMemos.map(task => `
+      <div class="bin-item">
+        <div class="bin-item-header">
+          <strong>${task.title}</strong>
+          <button class="restore-btn" onclick="toggleMemoComplete('${task.id}')" title="Restore">↺</button>
+        </div>
+        <div class="bin-item-body">${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}</div>
+      </div>
+    `).join("");
+  }
+  
+  // Render completed needs
+  const needsContainer = document.getElementById("completedNeedsList");
+  const completedNeeds = [];
+  
+  tasks.forEach(task => {
+    const needs = task.needs || [];
+    needs.forEach((need, index) => {
+      const needObj = typeof need === 'string' ? { text: need } : need;
+      if (needObj.completed) {
+        completedNeeds.push({
+          ...needObj,
+          taskId: task.id,
+          taskTitle: task.title,
+          needIndex: index
+        });
+      }
+    });
+  });
+  
+  if (completedNeeds.length === 0) {
+    needsContainer.innerHTML = "<p class='no-items'>No completed needs</p>";
+  } else {
+    needsContainer.innerHTML = completedNeeds.map(need => {
+      let detailsHTML = '';
+      if (need.completionNote) {
+        detailsHTML += `<div class="completion-detail"><strong>Note:</strong> ${need.completionNote}</div>`;
+      }
+      if (need.completionLink) {
+        detailsHTML += `<div class="completion-detail"><strong>Link:</strong> <a href="${need.completionLink}" target="_blank" rel="noopener">${need.completionLink}</a></div>`;
+      }
+      if (need.completedAt) {
+        const completedDate = need.completedAt.seconds ? new Date(need.completedAt.seconds * 1000) : new Date(need.completedAt);
+        detailsHTML += `<div class="completion-detail" style="font-size: 0.75rem; color: var(--muted);">Completed ${completedDate.toLocaleDateString()} by ${need.completedBy}</div>`;
+      }
+      
+      return `
+        <div class="bin-item">
+          <div class="bin-item-header">
+            <span>${need.text}</span>
+            <button class="restore-btn" onclick="toggleNeedComplete('${need.taskId}', ${need.needIndex})" title="Restore">↺</button>
+          </div>
+          <div class="bin-item-task">From: ${need.taskTitle}</div>
+          ${detailsHTML}
+        </div>
+      `;
+    }).join("");
+  }
+  
+  // Update badge count
+  const totalCompleted = completedMemos.length + completedNeeds.length;
+  const badge = document.getElementById("completedBinBadge");
+  if (totalCompleted > 0) {
+    badge.textContent = totalCompleted;
+    badge.style.display = "flex";
+  } else {
+    badge.style.display = "none";
+  }
 }
 
 function jumpTo(view, id) {
@@ -1480,6 +1705,7 @@ function initializeApp() {
     renderMemos(tasks); // Memos view shows all tasks with descriptions
     renderNeeds(activeTasks);
     renderCompleted(completedTasks);
+    renderCompletedBin(); // Update completed bin
     
     // Check for deadline notifications
     scheduleDeadlineCheck();
