@@ -48,6 +48,8 @@ window.openMessageModal = openMessageModal;
 window.closeMessageModal = closeMessageModal;
 window.sendMessage = sendMessage;
 window.clearAllNotifications = clearAllNotifications;
+window.toggleMemoComplete = toggleMemoComplete;
+window.toggleNeedComplete = toggleNeedComplete;
 
 // -----------------------------
 // Loading Indicator Functions
@@ -1096,6 +1098,36 @@ function renderUpdates(tasksToRender) {
   });
 }
 
+// Toggle memo complete status
+async function toggleMemoComplete(taskId) {
+  showLoading('Updating memo...');
+  const task = tasks.find(t => t.id === taskId);
+  const taskDoc = doc(db, "tasks", taskId);
+  
+  const newStatus = !task.memoCompleted;
+  await updateDoc(taskDoc, { memoCompleted: newStatus });
+  hideLoading();
+}
+
+// Toggle need complete status
+async function toggleNeedComplete(taskId, needIndex) {
+  showLoading('Updating need...');
+  const task = tasks.find(t => t.id === taskId);
+  const taskDoc = doc(db, "tasks", taskId);
+  
+  const needs = [...(task.needs || [])];
+  if (needs[needIndex]) {
+    // Ensure need is an object
+    if (typeof needs[needIndex] === 'string') {
+      needs[needIndex] = { text: needs[needIndex], priority: 'medium', completed: false };
+    }
+    needs[needIndex].completed = !needs[needIndex].completed;
+    
+    await updateDoc(taskDoc, { needs });
+  }
+  hideLoading();
+}
+
 function renderMemos(tasksToRender) {
   const container = document.getElementById("memoList");
   container.innerHTML = "";
@@ -1105,12 +1137,16 @@ function renderMemos(tasksToRender) {
       const div = document.createElement("div");
       div.className = "memo";
       div.id = `memo-${task.id}`;
+      const isCompleted = task.memoCompleted || false;
       div.innerHTML = `
         <div class="memo-header">
-          <strong>${task.title}</strong>
+          <div class="memo-header-left">
+            <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleMemoComplete('${task.id}')" class="memo-checkbox">
+            <strong class="${isCompleted ? 'crossed-off' : ''}">${task.title}</strong>
+          </div>
           <div class="jump-link" onclick="jumpTo('task', '${task.id}')">✅ View Task</div>
         </div>
-        <div class="memo-body" style="display: block;">${task.description}</div>
+        <div class="memo-body ${isCompleted ? 'crossed-off' : ''}" style="display: block;">${task.description}</div>
       `;
       container.appendChild(div);
     });
@@ -1149,7 +1185,8 @@ function renderNeeds(tasksToRender) {
   
   allNeeds.forEach((need) => {
     const div = document.createElement("div");
-    div.className = "needs-card";
+    const isCompleted = need.completed || false;
+    div.className = `needs-card ${isCompleted ? 'completed' : ''}`;
     const priority = need.priority || 'medium';
     const priorityEmoji = priority === "high" ? "🔴" : priority === "medium" ? "🟡" : "🟢";
     const priorityLabel = priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low";
@@ -1159,7 +1196,10 @@ function renderNeeds(tasksToRender) {
         <div class="task-link" onclick="jumpTo('task', '${need.taskId}')">From task: ${need.taskTitle}</div>
         <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
       </div>
-      <div class="need-text">${need.text}</div>
+      <div class="need-content">
+        <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleNeedComplete('${need.taskId}', ${need.needIndex})" class="need-checkbox">
+        <div class="need-text ${isCompleted ? 'crossed-off' : ''}">${need.text}</div>
+      </div>
       <button class="priority-change-btn" onclick="changeNeedPriority('${need.taskId}', ${need.needIndex})">🚩 Change Need Priority</button>
     `;
     container.appendChild(div);

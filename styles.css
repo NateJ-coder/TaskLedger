@@ -978,6 +978,43 @@ h1 {
   margin-top: 8px;
 }
 
+/* ---------- Crossed Off Items ---------- */
+.crossed-off {
+  text-decoration: line-through;
+  opacity: 0.5;
+  color: var(--muted);
+}
+
+.memo-checkbox, .need-checkbox {
+  transform: scale(1.2);
+  cursor: pointer;
+  margin-right: 12px;
+}
+
+.memo-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.need-content {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.need-content .need-text {
+  flex: 1;
+  margin-bottom: 0;
+  padding: 0;
+}
+
+.needs-card.completed {
+  opacity: 0.7;
+  background: var(--bg);
+}
+
 /* ---------- Completion Modal ---------- */
 .modal-overlay {
   position: fixed;
