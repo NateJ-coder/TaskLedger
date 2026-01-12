@@ -471,7 +471,7 @@ function jumpTo(view, id) {
 function renderNotifications(docs) {
   const list = document.getElementById("notificationsList");
 
-  if (docs.length === 0) {
+  if (!docs || docs.length === 0) {
     list.innerHTML = `<p class="no-notifications">No new notifications</p>`;
     return;
   }
@@ -479,11 +479,23 @@ function renderNotifications(docs) {
   list.innerHTML = docs.map(doc => {
     const n = doc.data();
     const notification = { id: doc.id, ...n };
-    const timeAgo = getTimeAgo(notification.createdAt);
+    
+    // Handle timestamp safely
+    let timeAgo = "Just now";
+    if (notification.createdAt && notification.createdAt.seconds) {
+      timeAgo = getTimeAgo(notification.createdAt);
+    }
+    
+    // Escape quotes in message and handle missing taskId
+    const message = (notification.message || "New notification").replace(/'/g, "&#39;");
+    const taskId = notification.taskId || "";
+    const notificationId = notification.id || "";
+    
+    const clickHandler = taskId ? `onclick="navigateToTask('${taskId}', '${notificationId}')"` : '';
     
     return `
-      <div class="notification-item ${!notification.read ? "unread" : ""}" onclick="navigateToTask('${notification.taskId}', '${notification.id}')">
-        <div class="notification-title">${notification.message}</div>
+      <div class="notification-item ${!notification.read ? "unread" : ""}" ${clickHandler}>
+        <div class="notification-title">${message}</div>
         <div class="notification-time">${timeAgo}</div>
       </div>
     `;

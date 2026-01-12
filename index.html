@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Shared Task Board</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#2563eb">
@@ -11,14 +12,30 @@
   <div class="app-container">
     <nav class="sidebar">
       <div class="sidebar-header">
-        <h2>TaskLedger</h2>
+        <h2 class="sidebar-logo">TL</h2>
+        <h2 class="sidebar-title">TaskLedger</h2>
       </div>
       <ul class="nav-links">
-        <li><a href="#" class="nav-link active" data-view="tasks">✅ Tasks</a></li>
-        <li><a href="#" class="nav-link" data-view="memos">📝 Memos</a></li>
-        <li><a href="#" class="nav-link" data-view="needs">📌 Needs</a></li>
-        <li><a href="#" class="nav-link" data-view="updates">📣 Updates</a></li>
-        <li><a href="#" class="nav-link" data-view="completed">🎉 Completed</a></li>
+        <li><a href="#" class="nav-link active" data-view="tasks">
+          <span class="nav-icon">✅</span>
+          <span class="nav-text">Tasks</span>
+        </a></li>
+        <li><a href="#" class="nav-link" data-view="memos">
+          <span class="nav-icon">📝</span>
+          <span class="nav-text">Memos</span>
+        </a></li>
+        <li><a href="#" class="nav-link" data-view="needs">
+          <span class="nav-icon">📌</span>
+          <span class="nav-text">Needs</span>
+        </a></li>
+        <li><a href="#" class="nav-link" data-view="updates">
+          <span class="nav-icon">📣</span>
+          <span class="nav-text">Updates</span>
+        </a></li>
+        <li><a href="#" class="nav-link" data-view="completed">
+          <span class="nav-icon">🎉</span>
+          <span class="nav-text">Completed</span>
+        </a></li>
       </ul>
       <div class="notifications-trigger" onclick="toggleNotificationsPanel()">
         <span class="notification-icon">🔔</span>
