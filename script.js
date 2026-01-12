@@ -7,6 +7,8 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
+  getDocs,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // -----------------------------
@@ -102,12 +104,11 @@ async function addTask() {
 
   // Create notification for new task
   await addDoc(notificationsCollection, {
-    type: "new_task",
+    type: "task",
     taskId: newTask.id,
-    taskTitle: title,
-    message: `New task created: "${title}"`,
-    read: false,
+    message: `New task added: ${title}`,
     createdAt: new Date(),
+    read: false,
   });
 
   closeAddTaskModal();
@@ -146,12 +147,22 @@ function closeCompletionModal() {
 async function saveCompletionDetails() {
   if (!taskToCompleteId) return;
 
+  const task = tasks.find(t => t.id === taskToCompleteId);
   const notes = document.getElementById("completionNotes").value.trim();
   const taskDoc = doc(db, "tasks", taskToCompleteId);
 
   await updateDoc(taskDoc, {
     done: true,
     completionNotes: notes,
+  });
+  
+  // Create notification for completion
+  await addDoc(notificationsCollection, {
+    type: "completion",
+    taskId: taskToCompleteId,
+    message: `Task completed: ${task.title}`,
+    createdAt: new Date(),
+    read: false,
   });
 
   closeCompletionModal();
@@ -189,6 +200,16 @@ async function saveUpdate() {
   });
 
   await updateDoc(taskDoc, { updates });
+  
+  // Create notification for update
+  await addDoc(notificationsCollection, {
+    type: "update",
+    taskId: taskToUpdateId,
+    message: `Update posted on "${task.title}"`,
+    createdAt: new Date(),
+    read: false,
+  });
+  
   closeUpdateModal();
 }
 
@@ -222,21 +243,31 @@ async function changePriority(taskId) {
   await addDoc(notificationsCollection, {
     type: "priority_change",
     taskId: taskId,
-    taskTitle: task.title,
     message: `Task priority changed: "${task.title}" is now ${priorityNames[selectedPriority]}`,
-    oldPriority: currentPriority,
-    newPriority: selectedPriority,
-    read: false,
     createdAt: new Date(),
+    read: false,
   });
 }
 
 // -----------------------------
 // Notifications Panel
 // -----------------------------
-function toggleNotificationsPanel() {
+async function toggleNotificationsPanel() {
   const panel = document.getElementById("notificationsPanel");
-  panel.classList.toggle("open");
+  const isOpen = panel.classList.toggle("open");
+
+  if (isOpen) {
+    const unreadQuery = query(
+      notificationsCollection,
+      where("read", "==", false)
+    );
+    const unread = await getDocs(unreadQuery);
+    unread.forEach(async (docSnap) => {
+      await updateDoc(doc(db, "notifications", docSnap.id), {
+        read: true
+      });
+    });
+  }
 }
 
 async function navigateToTask(taskId, notificationId) {
@@ -430,45 +461,26 @@ function jumpTo(view, id) {
 // -----------------------------
 // Render Notifications
 // -----------------------------
-function renderNotifications(notificationsToRender) {
-  const container = document.getElementById("notificationsList");
-  const badge = document.getElementById("notificationBadge");
-  
-  // Sort notifications by timestamp (newest first)
-  const sortedNotifications = [...notificationsToRender].sort((a, b) => {
-    const timeA = a.createdAt.seconds || 0;
-    const timeB = b.createdAt.seconds || 0;
-    return timeB - timeA;
-  });
-  
-  const unreadCount = sortedNotifications.filter(n => !n.read).length;
-  
-  if (unreadCount > 0) {
-    badge.textContent = unreadCount;
-    badge.style.display = "flex";
-  } else {
-    badge.style.display = "none";
-  }
-  
-  if (sortedNotifications.length === 0) {
-    container.innerHTML = '<p class="no-notifications">No new notifications</p>';
+function renderNotifications(docs) {
+  const list = document.getElementById("notificationsList");
+
+  if (docs.length === 0) {
+    list.innerHTML = `<p class="no-notifications">No new notifications</p>`;
     return;
   }
-  
-  container.innerHTML = "";
-  sortedNotifications.forEach((notification) => {
-    const div = document.createElement("div");
-    div.className = `notification-item ${!notification.read ? "unread" : ""}`;
-    div.onclick = () => navigateToTask(notification.taskId, notification.id);
-    
+
+  list.innerHTML = docs.map(doc => {
+    const n = doc.data();
+    const notification = { id: doc.id, ...n };
     const timeAgo = getTimeAgo(notification.createdAt);
     
-    div.innerHTML = `
-      <div class="notification-title">${notification.message}</div>
-      <div class="notification-time">${timeAgo}</div>
+    return `
+      <div class="notification-item ${!notification.read ? "unread" : ""}" onclick="navigateToTask('${notification.taskId}', '${notification.id}')">
+        <div class="notification-title">${notification.message}</div>
+        <div class="notification-time">${timeAgo}</div>
+      </div>
     `;
-    container.appendChild(div);
-  });
+  }).join("");
 }
 
 function getTimeAgo(timestamp) {
@@ -498,10 +510,24 @@ onSnapshot(q, (snapshot) => {
   renderCompleted(completedTasks);
 });
 
-// Listen for notifications
-const notificationsQuery = query(notificationsCollection, orderBy("createdAt", "desc"));
-onSnapshot(notificationsQuery, (snapshot) => {
-  notifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  renderNotifications(notifications);
+// Listen for unread notifications
+const unreadQuery = query(
+  notificationsCollection,
+  where("read", "==", false),
+  orderBy("createdAt", "desc")
+);
+
+onSnapshot(unreadQuery, (snapshot) => {
+  const count = snapshot.size;
+  const badge = document.getElementById("notificationBadge");
+
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = "flex";
+  } else {
+    badge.style.display = "none";
+  }
+
+  renderNotifications(snapshot.docs);
 });
 
