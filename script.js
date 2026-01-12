@@ -1184,6 +1184,4 @@ function initializeApp() {
     }
   });
 }
-  }
-});
 
