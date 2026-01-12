@@ -156,6 +156,27 @@
     </div>
   </div>
 
+  <div id="needsModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Edit Needs</h2>
+      <p id="needsTaskTitle"></p>
+      <textarea id="needsText" placeholder="What you need from your boss (one per line)..."></textarea>
+      <div class="needs-help-box">
+        <p class="needs-help-text">💡 <strong>How to add needs:</strong></p>
+        <ul class="needs-help-list">
+          <li>Enter each need on a separate line</li>
+          <li>Add priority: <code>[high]</code>, <code>[medium]</code>, or <code>[low]</code> after the text</li>
+          <li>Example: <code>Review my code [high]</code></li>
+          <li>If no priority specified, defaults to medium</li>
+        </ul>
+      </div>
+      <div class="modal-actions">
+        <button onclick="saveNeeds()">Save Needs</button>
+        <button class="secondary" onclick="closeNeedsModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="firebase-config.js"></script>
   <script type="module" src="script.js"></script>
 </body>

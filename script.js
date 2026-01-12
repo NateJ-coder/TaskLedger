@@ -33,6 +33,9 @@ window.handlePriorityChange = handlePriorityChange;
 window.openMemoModal = openMemoModal;
 window.closeMemoModal = closeMemoModal;
 window.saveMemo = saveMemo;
+window.openNeedsModal = openNeedsModal;
+window.closeNeedsModal = closeNeedsModal;
+window.saveNeeds = saveNeeds;
 
 // -----------------------------
 // Global state
@@ -42,6 +45,7 @@ let notifications = [];
 let taskToCompleteId = null;
 let taskToUpdateId = null;
 let taskToEditMemoId = null;
+let taskToEditNeedsId = null;
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
 
@@ -146,13 +150,37 @@ async function addTask() {
     }
   }
   
-  // Convert needs to objects with text and priority
+  // Parse needs with priority tags from initial input
   const needs = needsText 
-    ? needsText.split('\n').map(n => n.trim()).filter(n => n).map(text => ({
-        text,
-        priority: 'medium',
-        createdAt: new Date()
-      }))
+    ? needsText.split('\n').map(line => {
+        line = line.trim();
+        if (!line) return null;
+        
+        // Check for priority tag at the end
+        const highMatch = line.match(/(.+?)\s*\[(high|HIGH)\]\s*$/);
+        const mediumMatch = line.match(/(.+?)\s*\[(medium|MEDIUM|med|MED)\]\s*$/);
+        const lowMatch = line.match(/(.+?)\s*\[(low|LOW)\]\s*$/);
+        
+        let text = line;
+        let needPriority = 'medium'; // default
+        
+        if (highMatch) {
+          text = highMatch[1].trim();
+          needPriority = 'high';
+        } else if (mediumMatch) {
+          text = mediumMatch[1].trim();
+          needPriority = 'medium';
+        } else if (lowMatch) {
+          text = lowMatch[1].trim();
+          needPriority = 'low';
+        }
+        
+        return {
+          text,
+          priority: needPriority,
+          createdAt: new Date()
+        };
+      }).filter(need => need !== null)
     : [];
 
   const newTask = await addDoc(tasksCollection, {
@@ -307,6 +335,82 @@ async function saveMemo() {
   });
 
   closeMemoModal();
+}
+
+// -----------------------------
+// Needs Modal Logic
+// -----------------------------
+function openNeedsModal(id) {
+  const task = tasks.find(t => t.id === id);
+  taskToEditNeedsId = id;
+  document.getElementById("needsTaskTitle").textContent = `Edit needs for: ${task.title}`;
+  
+  // Convert needs array to text with priorities
+  const needs = task.needs || [];
+  const needsText = needs.map(need => {
+    // Handle both old string format and new object format
+    if (typeof need === 'string') {
+      return need;
+    } else {
+      const priority = need.priority || 'medium';
+      return `${need.text} [${priority}]`;
+    }
+  }).join('\n');
+  
+  document.getElementById("needsText").value = needsText;
+  document.getElementById("needsModal").style.display = "flex";
+}
+
+function closeNeedsModal() {
+  document.getElementById("needsModal").style.display = "none";
+  document.getElementById("needsText").value = "";
+  taskToEditNeedsId = null;
+}
+
+async function saveNeeds() {
+  if (!taskToEditNeedsId) return;
+
+  const needsText = document.getElementById("needsText").value.trim();
+  
+  // Parse needs with priority tags [high], [medium], [low]
+  const needs = needsText 
+    ? needsText.split('\n').map(line => {
+        line = line.trim();
+        if (!line) return null;
+        
+        // Check for priority tag at the end
+        const highMatch = line.match(/(.+?)\s*\[(high|HIGH)\]\s*$/);
+        const mediumMatch = line.match(/(.+?)\s*\[(medium|MEDIUM|med|MED)\]\s*$/);
+        const lowMatch = line.match(/(.+?)\s*\[(low|LOW)\]\s*$/);
+        
+        let text = line;
+        let priority = 'medium'; // default
+        
+        if (highMatch) {
+          text = highMatch[1].trim();
+          priority = 'high';
+        } else if (mediumMatch) {
+          text = mediumMatch[1].trim();
+          priority = 'medium';
+        } else if (lowMatch) {
+          text = lowMatch[1].trim();
+          priority = 'low';
+        }
+        
+        return {
+          text,
+          priority,
+          createdAt: new Date()
+        };
+      }).filter(need => need !== null)
+    : [];
+  
+  const taskDoc = doc(db, "tasks", taskToEditNeedsId);
+  await updateDoc(taskDoc, {
+    needs: needs,
+  });
+
+  closeNeedsModal();
 }
 
 // -----------------------------
@@ -521,6 +625,7 @@ function renderTasks(tasksToRender) {
       <div class="task-actions">
         <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
         <button onclick="openMemoModal('${task.id}')">📝 ${task.description ? 'Edit' : 'Add'} Memo</button>
+        <button onclick="openNeedsModal('${task.id}')">📌 Edit Needs</button>
         <button class="priority-change-btn" onclick="changeTaskPriority('${task.id}')">🚩 Change Task Priority</button>
       </div>
     `;
