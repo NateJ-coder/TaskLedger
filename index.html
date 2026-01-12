@@ -34,13 +34,18 @@
           <span class="nav-icon">📌</span>
           <span class="nav-text">Needs</span>
         </a></li>
+        <li><a href="#" class="nav-link" data-view="review">
+          <span class="nav-icon">🔍</span>
+          <span class="nav-text">Review</span>
+          <span class="review-badge" id="reviewBadge" style="display: none;">0</span>
+        </a></li>
         <li><a href="#" class="nav-link" data-view="updates">
           <span class="nav-icon">📣</span>
           <span class="nav-text">Updates</span>
         </a></li>
         <li><a href="#" class="nav-link" data-view="files">
-          <span class="nav-icon">📁</span>
-          <span class="nav-text">Files</span>
+          <span class="nav-icon">�</span>
+          <span class="nav-text">Resources</span>
         </a></li>
         <li><a href="#" class="nav-link" data-view="completed">
           <span class="nav-icon">🎉</span>
@@ -115,7 +120,11 @@
         <h1>Aggregated Needs</h1>
         <section id="needsList"></section>
       </div>
-
+      <div id="review-view" class="view">
+        <h1>Tasks Pending Review</h1>
+        <p class="view-description">Review completed work and approve or request changes</p>
+        <section id="reviewList"></section>
+      </div>
       <div id="completed-view" class="view">
         <h1>Completed Tasks</h1>
         <section id="completedList"></section>
@@ -128,10 +137,10 @@
 
       <div id="files-view" class="view">
         <div class="view-header">
-          <h1>File Storage</h1>
-          <button class="add-file-btn" onclick="openFileUploadModal()">+ Upload File</button>
+          <h1>Resources</h1>
+          <button class="add-file-btn" onclick="openFileUploadModal()">+ Add Resource</button>
         </div>
-        <p class="view-description">Store files permanently with labels and task associations</p>
+        <p class="view-description">Permanent storage for files, links, and references. These are never auto-deleted.</p>
         <section id="filesList"></section>
       </div>
     </main>
@@ -180,12 +189,47 @@
 
   <div id="completionModal" class="modal-overlay">
     <div class="modal-content">
-      <h2>Task Complete!</h2>
-      <p>Add any relevant completion notes, links, or details below.</p>
-      <textarea id="completionNotes" placeholder="e.g., Deployed to production, link to report, etc."></textarea>
+      <h2>Submit Task for Review</h2>
+      <p id="completionTaskTitle" style="color: var(--muted); margin-bottom: 16px;"></p>
+      
+      <label for="completionNotes" style="display: block; margin-bottom: 6px; font-weight: 600;">Completion Summary:</label>
+      <textarea id="completionNotes" placeholder="Hi Craig, I've completed this task. Here's what I did..." rows="5"></textarea>
+      
+      <div class="file-attachment-section">
+        <label>📎 Attach Files (proof of completion):</label>
+        <input type="file" id="completionFileInput" multiple />
+        <div class="file-preview" id="completionFilePreview"></div>
+      </div>
+      
+      <div class="media-section">
+        <h4>📸 Additional Materials</h4>
+        <div class="input-group">
+          <label for="completionImageUrl">Image URL:</label>
+          <input id="completionImageUrl" type="url" placeholder="https://example.com/screenshot.jpg" />
+        </div>
+        <div class="input-group">
+          <label for="completionLinks">Related Links (one per line):</label>
+          <textarea id="completionLinks" rows="3" placeholder="Documentation | https://...\nDemo | https://..." style="min-height: 60px;"></textarea>
+          <small>Format: Link text | URL</small>
+        </div>
+      </div>
+      
       <div class="modal-actions">
-        <button onclick="saveCompletionDetails()">Save & Complete</button>
+        <button onclick="submitForReview()">Submit for Review</button>
         <button class="secondary" onclick="closeCompletionModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reviewFeedbackModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2 id="reviewFeedbackTitle">Review Feedback</h2>
+      <p id="reviewFeedbackTaskTitle" style="color: var(--muted); margin-bottom: 16px;"></p>
+      <label for="reviewFeedbackNotes" style="display: block; margin-bottom: 6px; font-weight: 600;">Notes:</label>
+      <textarea id="reviewFeedbackNotes" placeholder="Add feedback or request changes..." rows="5"></textarea>
+      <div class="modal-actions">
+        <button id="reviewActionBtn" onclick="submitReviewAction()">Submit</button>
+        <button class="secondary" onclick="closeReviewFeedbackModal()">Cancel</button>
       </div>
     </div>
   </div>
@@ -335,19 +379,35 @@
 
   <div id="fileUploadModal" class="modal-overlay">
     <div class="modal-content">
-      <h2>Upload Permanent File</h2>
-      <input id="fileLabel" placeholder="File label/description" />
-      <input id="fileTaskAssociation" placeholder="Related task (optional)" />
-      <input type="file" id="permanentFileInput" />
-      <div class="file-upload-progress" id="fileUploadProgress" style="display: none;">
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-        <span class="progress-text" id="progressText">0%</span>
+      <h2>Add Permanent Resource</h2>
+      <p style="color: var(--muted); margin-bottom: 16px;">Add a file or link that will be stored permanently.</p>
+      
+      <input id="resourceLabel" placeholder="Resource name/description" />
+      <input id="resourceTaskAssociation" placeholder="Related task (optional)" />
+      
+      <div class="resource-type-tabs" style="display: flex; gap: 8px; margin: 16px 0;">
+        <button type="button" class="resource-tab active" onclick="switchResourceTab('file')" id="fileTab">📄 Upload File</button>
+        <button type="button" class="resource-tab" onclick="switchResourceTab('link')" id="linkTab">🔗 Add Link</button>
       </div>
+      
+      <div id="fileResourceSection">
+        <input type="file" id="permanentFileInput" />
+        <div class="file-upload-progress" id="fileUploadProgress" style="display: none;">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <span class="progress-text" id="progressText">0%</span>
+        </div>
+      </div>
+      
+      <div id="linkResourceSection" style="display: none;">
+        <input id="permanentLinkUrl" type="url" placeholder="https://example.com/document.pdf" />
+        <small style="display: block; color: var(--muted); margin-top: 4px;">Any URL: documents, images, videos, websites, etc.</small>
+      </div>
+      
       <div class="modal-actions">
-        <button onclick="uploadPermanentFile()">Upload</button>
-        <button class="secondary" onclick="closeFileUploadModal()">Cancel</button>
+        <button onclick="savePermanentResource()">Save Resource</button>
+        <button class="secondary" onclick="closeResourceModal()">Cancel</button>
       </div>
     </div>
   </div>

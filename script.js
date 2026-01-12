@@ -65,6 +65,12 @@ window.openFileUploadModal = openFileUploadModal;
 window.closeFileUploadModal = closeFileUploadModal;
 window.uploadPermanentFile = uploadPermanentFile;
 window.deletePermanentFile = deletePermanentFile;
+window.submitForReview = submitForReview;
+window.verifyTaskComplete = verifyTaskComplete;
+window.flagForReview = flagForReview;
+window.openReviewFeedbackModal = openReviewFeedbackModal;
+window.closeReviewFeedbackModal = closeReviewFeedbackModal;
+window.submitReviewAction = submitReviewAction;
 
 // -----------------------------
 // Loading Indicator Functions
@@ -347,60 +353,122 @@ async function toggleDone(id) {
   const task = tasks.find((t) => t.id === id);
   const taskDoc = doc(db, "tasks", id);
 
-  if (!task.done) {
-    // If marking as complete, show the modal
+  if (task.status === 'completed') {
+    // If already completed, allow unchecking to move back to active
+    await updateDoc(taskDoc, { status: 'active', done: false });
+    hideLoading();
+  } else if (task.status === 'in-review') {
+    // Can't uncheck if in review - needs to be flagged back by reviewer
+    hideLoading();
+    alert('This task is pending review. Only the reviewer can move it back.');
+  } else {
+    // If marking as complete, show the review submission modal
     hideLoading();
     openCompletionModal(id);
-  } else {
-    // If un-checking, mark as incomplete immediately
-    await updateDoc(taskDoc, { done: false, completionNotes: "" });
-    hideLoading();
   }
 }
 
 // -----------------------------
-// Completion Modal Logic
+// Review Submission Modal Logic
 // -----------------------------
 function openCompletionModal(id) {
+  const task = tasks.find(t => t.id === id);
   taskToCompleteId = id;
+  document.getElementById("completionTaskTitle").textContent = `Task: ${task.title}`;
   document.getElementById("completionModal").style.display = "flex";
+  document.getElementById("completionNotes").value = "";
+  document.getElementById("completionImageUrl").value = "";
+  document.getElementById("completionLinks").value = "";
+  document.getElementById("completionFileInput").value = "";
+  document.getElementById("completionFilePreview").innerHTML = "";
 }
 
 function closeCompletionModal() {
   document.getElementById("completionModal").style.display = "none";
   document.getElementById("completionNotes").value = "";
+  document.getElementById("completionImageUrl").value = "";
+  document.getElementById("completionLinks").value = "";
+  document.getElementById("completionFileInput").value = "";
   taskToCompleteId = null;
-  // Re-check the checkbox since the user cancelled
-  renderTasks(tasks.filter(t => !t.done));
+  // Re-render to uncheck the checkbox
+  const activeTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'in-review');
+  renderTasks(activeTasks);
 }
 
-async function saveCompletionDetails() {
+async function submitForReview() {
   if (!taskToCompleteId) return;
 
-  showLoading('Completing task...');
+  showLoading('Submitting for review...');
   const task = tasks.find(t => t.id === taskToCompleteId);
   const notes = document.getElementById("completionNotes").value.trim();
-  const taskDoc = doc(db, "tasks", taskToCompleteId);
-
-  // Delete all task files before marking complete
-  try {
-    await deleteTaskFiles(task);
-  } catch (error) {
-    console.error('Error deleting task files:', error);
-    // Continue even if file deletion fails
+  const imageUrl = document.getElementById("completionImageUrl").value.trim();
+  const linksText = document.getElementById("completionLinks").value.trim();
+  const fileInput = document.getElementById("completionFileInput");
+  
+  if (!notes) {
+    alert('Please add a completion summary before submitting for review.');
+    hideLoading();
+    return;
   }
-
+  
+  // Parse links
+  const completionLinks = linksText ? linksText.split('\n').map(line => {
+    const parts = line.split('|').map(p => p.trim());
+    if (parts.length === 2 && parts[1]) {
+      return { text: parts[0] || parts[1], url: parts[1] };
+    }
+    return null;
+  }).filter(link => link !== null) : [];
+  
+  const taskDoc = doc(db, "tasks", taskToCompleteId);
+  
+  // Prepare review submission data
+  const reviewSubmission = {
+    submittedBy: currentUser,
+    submittedAt: new Date(),
+    notes: notes,
+    imageUrl: imageUrl,
+    links: completionLinks,
+    files: []
+  };
+  
+  // Upload files if selected
+  if (fileInput && fileInput.files.length > 0) {
+    for (let i = 0; i < fileInput.files.length; i++) {
+      try {
+        const file = fileInput.files[i];
+        const path = `review-submissions/${taskToCompleteId}/${Date.now()}_${file.name}`;
+        const fileData = await uploadFileToStorage(file, path);
+        reviewSubmission.files.push(fileData);
+      } catch (error) {
+        console.error('File upload failed:', error);
+      }
+    }
+  }
+  
+  // Update task to in-review status
   await updateDoc(taskDoc, {
-    done: true,
-    completionNotes: notes,
+    status: 'in-review',
+    reviewSubmission: reviewSubmission,
+    done: false // Keep done false so it doesn't show in completed
   });
   
-  // Create notification for completion
+  // Add update to task history
+  const updates = task.updates || [];
+  updates.push({
+    type: 'submitted_for_review',
+    text: `Submitted for review: ${notes}`,
+    timestamp: new Date(),
+    by: currentUser
+  });
+  await updateDoc(taskDoc, { updates });
+  
+  // Create notification for reviewer
   const recipient = currentUser === "Nate" ? "Craig" : "Nate";
   await addDoc(notificationsCollection, {
-    type: "completion",
+    type: "review_requested",
     taskId: taskToCompleteId,
-    message: `${currentUser} completed task: ${task.title}`,
+    message: `${currentUser} submitted "${task.title}" for review`,
     createdAt: new Date(),
     read: false,
     recipient: recipient,
@@ -409,6 +477,12 @@ async function saveCompletionDetails() {
 
   closeCompletionModal();
   hideLoading();
+  alert('Task submitted for review! 🎉');
+}
+
+// Old function kept for backward compatibility but now redirects
+async function saveCompletionDetails() {
+  await submitForReview();
 }
 
 
@@ -470,18 +544,9 @@ function openMemoModal(id) {
   document.getElementById("memoTaskTitle").textContent = `Edit memo for: ${task.title}`;
   document.getElementById("memoText").value = task.description || "";
   
-  // Load existing media
-  document.getElementById("memoImageUrl").value = task.memoImageUrl || "";
+  // Load existing links
   const memoLinks = task.memoLinks || [];
   document.getElementById("memoLinks").value = memoLinks.map(link => `${link.text} | ${link.url}`).join('\n');
-  
-  // Show image preview if exists
-  const preview = document.getElementById("memoImagePreview");
-  if (task.memoImageUrl) {
-    preview.innerHTML = `<img src="${task.memoImageUrl}" alt="Memo image" />`;
-  } else {
-    preview.innerHTML = "";
-  }
   
   document.getElementById("memoModal").style.display = "flex";
 }
@@ -489,9 +554,7 @@ function openMemoModal(id) {
 function closeMemoModal() {
   document.getElementById("memoModal").style.display = "none";
   document.getElementById("memoText").value = "";
-  document.getElementById("memoImageUrl").value = "";
   document.getElementById("memoLinks").value = "";
-  document.getElementById("memoImagePreview").innerHTML = "";
   taskToEditMemoId = null;
 }
 
@@ -501,7 +564,6 @@ async function saveMemo() {
   showLoading('Saving memo...');
   const task = tasks.find(t => t.id === taskToEditMemoId);
   const memoText = document.getElementById("memoText").value.trim();
-  const imageUrl = document.getElementById("memoImageUrl").value.trim();
   const linksText = document.getElementById("memoLinks").value.trim();
   const fileInput = document.getElementById("memoFileInput");
   
@@ -518,7 +580,6 @@ async function saveMemo() {
 
   await updateDoc(taskDoc, {
     description: memoText,
-    memoImageUrl: imageUrl,
     memoLinks: memoLinks,
   });
 
@@ -653,18 +714,9 @@ function openNeedsModal(id) {
   
   document.getElementById("needsText").value = needsText;
   
-  // Load existing media
-  document.getElementById("needsImageUrl").value = task.needsImageUrl || "";
+  // Load existing links
   const needsLinks = task.needsLinks || [];
   document.getElementById("needsLinks").value = needsLinks.map(link => `${link.text} | ${link.url}`).join('\n');
-  
-  // Show image preview if exists
-  const preview = document.getElementById("needsImagePreview");
-  if (task.needsImageUrl) {
-    preview.innerHTML = `<img src="${task.needsImageUrl}" alt="Needs image" />`;
-  } else {
-    preview.innerHTML = "";
-  }
   
   document.getElementById("needsModal").style.display = "flex";
 }
@@ -672,9 +724,7 @@ function openNeedsModal(id) {
 function closeNeedsModal() {
   document.getElementById("needsModal").style.display = "none";
   document.getElementById("needsText").value = "";
-  document.getElementById("needsImageUrl").value = "";
   document.getElementById("needsLinks").value = "";
-  document.getElementById("needsImagePreview").innerHTML = "";
   taskToEditNeedsId = null;
 }
 
@@ -683,7 +733,6 @@ async function saveNeeds() {
 
   showLoading('Saving needs...');
   const needsText = document.getElementById("needsText").value.trim();
-  const imageUrl = document.getElementById("needsImageUrl").value.trim();
   const linksText = document.getElementById("needsLinks").value.trim();
   
   // Parse links
@@ -731,7 +780,6 @@ async function saveNeeds() {
   const taskDoc = doc(db, "tasks", taskToEditNeedsId);
   await updateDoc(taskDoc, {
     needs: needs,
-    needsImageUrl: imageUrl,
     needsLinks: needsLinks,
   });
 
@@ -1179,15 +1227,25 @@ function renderTasks(tasksToRender) {
       </div>
     ` : "";
 
+    // Show flagged feedback if task was flagged for changes
+    const flaggedHTML = task.flaggedForChanges && task.reviewFeedback ? `
+      <div class="flagged-notice">
+        <strong>🚩 Flagged for Review</strong>
+        <p><strong>${task.reviewedBy}:</strong> ${task.reviewFeedback}</p>
+      </div>
+    ` : "";
+
     div.innerHTML = `
       <div class="task-header">
         <div>
           <strong>${task.title}</strong>
           <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
           ${deadlineHTML}
+          ${task.flaggedForChanges ? '<span class="flagged-badge">🚩 Changes Requested</span>' : ''}
         </div>
         <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
       </div>
+      ${flaggedHTML}
       ${updateHistoryHTML}
       ${attachmentsHTML}
       ${fileHTML}
@@ -1424,7 +1482,7 @@ function renderMemos(tasksToRender) {
       
       // Build media HTML
       let mediaHtml = '';
-      if (task.memoImageUrl || (task.memoLinks && task.memoLinks.length > 0) || task.memoFile) {
+      if ((task.memoLinks && task.memoLinks.length > 0) || task.memoFile) {
         mediaHtml = '<div class="memo-media">';
         
         // Add file if exists
@@ -1439,11 +1497,6 @@ function renderMemos(tasksToRender) {
               <a href="${task.memoFile.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
             </div>
           `;
-        }
-        
-        // Add image if exists
-        if (task.memoImageUrl) {
-          mediaHtml += `<div class="memo-image"><img src="${task.memoImageUrl}" alt="Memo image" /></div>`;
         }
         
         // Add links if exist
@@ -1492,7 +1545,8 @@ function renderNeeds(tasksToRender) {
             ...needObj,
             taskId: task.id,
             taskTitle: task.title,
-            needIndex: index
+            needIndex: index,
+            needsLinks: task.needsLinks || [] // Add task-level links to each need
           });
         }
       });
@@ -1517,22 +1571,15 @@ function renderNeeds(tasksToRender) {
     
     // Build media HTML for needs
     let needMediaHtml = '';
-    if (need.needsImageUrl || (need.needsLinks && need.needsLinks.length > 0)) {
+    if (need.needsLinks && need.needsLinks.length > 0) {
       needMediaHtml = '<div class="need-media">';
       
-      // Add image if exists
-      if (need.needsImageUrl) {
-        needMediaHtml += `<div class="need-image"><img src="${need.needsImageUrl}" alt="Need image" /></div>`;
-      }
-      
       // Add links if exist
-      if (need.needsLinks && need.needsLinks.length > 0) {
-        needMediaHtml += '<div class="need-links">';
-        need.needsLinks.forEach(link => {
-          needMediaHtml += `<a href="${link.url}" target="_blank" rel="noopener noreferrer">🔗 ${link.text}</a>`;
-        });
-        needMediaHtml += '</div>';
-      }
+      needMediaHtml += '<div class="need-links">';
+      need.needsLinks.forEach(link => {
+        needMediaHtml += `<a href="${link.url}" target="_blank" rel="noopener noreferrer">🔗 ${link.text}</a>`;
+      });
+      needMediaHtml += '</div>';
       
       needMediaHtml += '</div>';
     }
@@ -1578,11 +1625,6 @@ function renderCompletedBin() {
   } else {
     memosContainer.innerHTML = completedMemos.map(task => {
       let mediaHtml = '';
-      
-      // Add image if exists
-      if (task.memoImageUrl) {
-        mediaHtml += `<div class="bin-media-image"><img src="${task.memoImageUrl}" alt="Memo image" style="max-width: 100%; max-height: 150px; border-radius: 4px; margin-top: 8px;" /></div>`;
-      }
       
       // Add links if exist
       if (task.memoLinks && task.memoLinks.length > 0) {
@@ -1638,10 +1680,6 @@ function renderCompletedBin() {
       }
       
       // Add media from the need itself
-      if (need.needsImageUrl) {
-        detailsHTML += `<div class="bin-media-image"><img src="${need.needsImageUrl}" alt="Need image" style="max-width: 100%; max-height: 150px; border-radius: 4px; margin-top: 8px;" /></div>`;
-      }
-      
       if (need.needsLinks && need.needsLinks.length > 0) {
         detailsHTML += '<div class="bin-media-links" style="margin-top: 8px;">';
         need.needsLinks.forEach(link => {
@@ -1931,13 +1969,16 @@ function initializeApp() {
       .map((doc) => ({ id: doc.id, ...doc.data() }))
       .filter(task => !task.owner || task.owner === currentUser);
     
-    const activeTasks = tasks.filter(t => !t.done);
-    const completedTasks = tasks.filter(t => t.done);
+    // Filter by status
+    const activeTasks = tasks.filter(t => !t.status || t.status === 'active');
+    const reviewTasks = tasks.filter(t => t.status === 'in-review');
+    const completedTasks = tasks.filter(t => t.status === 'completed' || t.done);
 
     renderTasks(activeTasks);
     renderUpdates(tasks);
     renderMemos(tasks); // Memos view shows all tasks with descriptions
     renderNeeds(activeTasks);
+    renderReview(tasks); // Render review panel
     renderCompleted(completedTasks);
     renderCompletedBin(); // Update completed bin
     
@@ -2195,6 +2236,239 @@ async function deleteNeedFile(need) {
 }
 
 // ========================================
+// REVIEW SYSTEM
+// ========================================
+
+let currentReviewTaskId = null;
+let currentReviewAction = null;
+
+function openReviewFeedbackModal(taskId, action) {
+  const task = tasks.find(t => t.id === taskId);
+  currentReviewTaskId = taskId;
+  currentReviewAction = action;
+  
+  const modal = document.getElementById("reviewFeedbackModal");
+  const title = document.getElementById("reviewFeedbackTitle");
+  const taskTitle = document.getElementById("reviewFeedbackTaskTitle");
+  const btn = document.getElementById("reviewActionBtn");
+  
+  if (action === 'approve') {
+    title.textContent = "Approve Task Completion";
+    btn.textContent = "Approve & Complete";
+    btn.style.background = "#10b981";
+  } else {
+    title.textContent = "Request Changes";
+    btn.textContent = "Flag for Review";
+    btn.style.background = "#ef4444";
+  }
+  
+  taskTitle.textContent = `Task: ${task.title}`;
+  document.getElementById("reviewFeedbackNotes").value = "";
+  modal.style.display = "flex";
+}
+
+function closeReviewFeedbackModal() {
+  document.getElementById("reviewFeedbackModal").style.display = "none";
+  document.getElementById("reviewFeedbackNotes").value = "";
+  currentReviewTaskId = null;
+  currentReviewAction = null;
+}
+
+async function submitReviewAction() {
+  if (!currentReviewTaskId || !currentReviewAction) return;
+  
+  const feedback = document.getElementById("reviewFeedbackNotes").value.trim();
+  
+  if (currentReviewAction === 'approve') {
+    await verifyTaskComplete(currentReviewTaskId, feedback);
+  } else {
+    await flagForReview(currentReviewTaskId, feedback);
+  }
+  
+  closeReviewFeedbackModal();
+}
+
+async function verifyTaskComplete(taskId, feedback) {
+  showLoading('Approving task...');
+  const task = tasks.find(t => t.id === taskId);
+  const taskDoc = doc(db, "tasks", taskId);
+  
+  // Delete all task files when completing
+  try {
+    await deleteTaskFiles(task);
+  } catch (error) {
+    console.error('Error deleting task files:', error);
+  }
+  
+  // Update task to completed status
+  await updateDoc(taskDoc, {
+    status: 'completed',
+    done: true,
+    reviewedBy: currentUser,
+    reviewedAt: new Date(),
+    reviewFeedback: feedback || 'Approved'
+  });
+  
+  // Add update to task history
+  const updates = task.updates || [];
+  updates.push({
+    type: 'approved',
+    text: `✅ Approved by ${currentUser}${feedback ? `: ${feedback}` : ''}`,
+    timestamp: new Date(),
+    by: currentUser
+  });
+  await updateDoc(taskDoc, { updates });
+  
+  // Create notification for task owner
+  const recipient = task.createdBy || (currentUser === "Nate" ? "Craig" : "Nate");
+  await addDoc(notificationsCollection, {
+    type: "task_approved",
+    taskId: taskId,
+    message: `${currentUser} approved your task: "${task.title}"`,
+    createdAt: new Date(),
+    read: false,
+    recipient: recipient,
+    sender: currentUser,
+  });
+  
+  hideLoading();
+  alert('Task approved and marked complete! ✅');
+}
+
+async function flagForReview(taskId, feedback) {
+  showLoading('Flagging for review...');
+  const task = tasks.find(t => t.id === taskId);
+  const taskDoc = doc(db, "tasks", taskId);
+  
+  if (!feedback) {
+    hideLoading();
+    alert('Please provide feedback about what needs to be changed.');
+    return;
+  }
+  
+  // Move task back to active status with review feedback
+  await updateDoc(taskDoc, {
+    status: 'active',
+    done: false,
+    reviewedBy: currentUser,
+    reviewedAt: new Date(),
+    reviewFeedback: feedback,
+    flaggedForChanges: true
+  });
+  
+  // Add update to task history
+  const updates = task.updates || [];
+  updates.push({
+    type: 'flagged',
+    text: `🚩 Flagged by ${currentUser}: ${feedback}`,
+    timestamp: new Date(),
+    by: currentUser
+  });
+  await updateDoc(taskDoc, { updates });
+  
+  // Create notification for task owner
+  const recipient = task.createdBy || (currentUser === "Nate" ? "Craig" : "Nate");
+  await addDoc(notificationsCollection, {
+    type: "task_flagged",
+    taskId: taskId,
+    message: `${currentUser} requested changes on "${task.title}": ${feedback}`,
+    createdAt: new Date(),
+    read: false,
+    recipient: recipient,
+    sender: currentUser,
+  });
+  
+  hideLoading();
+  alert('Task flagged for review and sent back to task owner. 🚩');
+}
+
+function renderReview(tasksToRender) {
+  const container = document.getElementById("reviewList");
+  if (!container) return;
+  
+  const reviewTasks = tasksToRender.filter(t => t.status === 'in-review');
+  
+  // Update review badge
+  const badge = document.getElementById("reviewBadge");
+  if (badge) {
+    if (reviewTasks.length > 0) {
+      badge.textContent = reviewTasks.length;
+      badge.style.display = "flex";
+    } else {
+      badge.style.display = "none";
+    }
+  }
+  
+  if (reviewTasks.length === 0) {
+    container.innerHTML = "<p class='no-reviews'>No tasks pending review.</p>";
+    return;
+  }
+  
+  container.innerHTML = reviewTasks.map(task => {
+    const submission = task.reviewSubmission || {};
+    const submittedDate = submission.submittedAt?.seconds 
+      ? new Date(submission.submittedAt.seconds * 1000).toLocaleString()
+      : 'Unknown date';
+    
+    let filesHTML = '';
+    if (submission.files && submission.files.length > 0) {
+      filesHTML = '<div class="review-files"><h4>📎 Attached Files:</h4>' +
+        submission.files.map(file => `
+          <div class="task-file-attachment">
+            <div class="file-icon">${getFileIcon(file.type)}</div>
+            <div class="file-info-compact">
+              <div class="file-name-small">${file.name}</div>
+              <div class="file-size-small">${(file.size / 1024).toFixed(2)} KB</div>
+            </div>
+            <a href="${file.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+          </div>
+        `).join('') + '</div>';
+    }
+    
+    let imageHTML = '';
+    if (submission.imageUrl) {
+      imageHTML = `<div class="review-image"><h4>📸 Image:</h4><img src="${submission.imageUrl}" alt="Completion image" style="max-width: 100%; border-radius: 8px; margin-top: 8px;" /></div>`;
+    }
+    
+    let linksHTML = '';
+    if (submission.links && submission.links.length > 0) {
+      linksHTML = '<div class="review-links"><h4>🔗 Links:</h4>' +
+        submission.links.map(link => `
+          <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="review-link">🔗 ${link.text}</a>
+        `).join('') + '</div>';
+    }
+    
+    return `
+      <div class="review-card">
+        <div class="review-header">
+          <h3>${task.title}</h3>
+          <span class="review-status">Pending Review</span>
+        </div>
+        <div class="review-meta">
+          <span>Submitted by ${submission.submittedBy || 'Unknown'}</span>
+          <span>${submittedDate}</span>
+        </div>
+        <div class="review-notes">
+          <h4>📝 Completion Summary:</h4>
+          <p>${submission.notes || 'No notes provided'}</p>
+        </div>
+        ${filesHTML}
+        ${imageHTML}
+        ${linksHTML}
+        <div class="review-actions">
+          <button class="approve-btn" onclick="openReviewFeedbackModal('${task.id}', 'approve')">
+            ✅ Verify as Complete
+          </button>
+          <button class="reject-btn" onclick="openReviewFeedbackModal('${task.id}', 'reject')">
+            🚩 Flag for Review
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ========================================
 // PERMANENT FILE STORAGE
 // ========================================
 
@@ -2215,7 +2489,7 @@ function renderPermanentFiles() {
   if (!container) return;
   
   if (permanentFiles.length === 0) {
-    container.innerHTML = "<p class='no-files'>No files uploaded yet. Click 'Upload File' to add your first file.</p>";
+    container.innerHTML = "<p class='no-files'>No resources yet. Click 'Add Resource' to add files or links.</p>";
     return;
   }
   
@@ -2223,23 +2497,26 @@ function renderPermanentFiles() {
     const uploadDate = file.uploadedAt?.seconds 
       ? new Date(file.uploadedAt.seconds * 1000).toLocaleDateString() 
       : 'Unknown date';
-    const fileSize = file.size ? (file.size / 1024).toFixed(2) + ' KB' : 'Unknown size';
+    
+    const isLink = file.resourceType === 'link';
+    const icon = isLink ? '🔗' : getFileIcon(file.type);
+    const fileSize = !isLink && file.size ? (file.size / 1024).toFixed(2) + ' KB' : '';
     
     return `
       <div class="file-card">
-        <div class="file-icon">${getFileIcon(file.type)}</div>
+        <div class="file-icon">${icon}</div>
         <div class="file-info">
           <div class="file-name">${file.name}</div>
           <div class="file-label">${file.label || 'No description'}</div>
           ${file.taskAssociation ? `<div class="file-task-tag">📎 ${file.taskAssociation}</div>` : ''}
           <div class="file-meta">
-            <span>${fileSize}</span> • 
+            ${fileSize ? `<span>${fileSize}</span> • ` : ''}
             <span>${uploadDate}</span> • 
             <span>by ${file.uploadedBy}</span>
           </div>
         </div>
         <div class="file-actions">
-          <a href="${file.url}" target="_blank" class="file-download-btn" title="Download">⬇️</a>
+          <a href="${file.url}" target="_blank" class="file-download-btn" title="${isLink ? 'Open Link' : 'Download'}">${isLink ? '↗️' : '⬇️'}</a>
           <button class="file-delete-btn" onclick="deletePermanentFile('${file.id}')" title="Delete">🗑️</button>
         </div>
       </div>
@@ -2260,22 +2537,53 @@ function getFileIcon(fileType) {
   return '📄';
 }
 
+// Resource Modal Functions
+let currentResourceType = 'file'; // Track whether we're adding file or link
+
 function openFileUploadModal() {
   document.getElementById("fileUploadModal").style.display = "flex";
-  document.getElementById("fileLabel").value = "";
-  document.getElementById("fileTaskAssociation").value = "";
+  document.getElementById("resourceLabel").value = "";
+  document.getElementById("resourceTaskAssociation").value = "";
   document.getElementById("permanentFileInput").value = "";
+  document.getElementById("permanentLinkUrl").value = "";
   document.getElementById("fileUploadProgress").style.display = "none";
+  // Reset to file tab
+  switchResourceTab('file');
 }
 
 function closeFileUploadModal() {
   document.getElementById("fileUploadModal").style.display = "none";
 }
 
+function switchResourceTab(type) {
+  currentResourceType = type;
+  const fileTab = document.getElementById("fileTab");
+  const linkTab = document.getElementById("linkTab");
+  const fileSection = document.getElementById("fileResourceSection");
+  const linkSection = document.getElementById("linkResourceSection");
+  
+  if (type === 'file') {
+    fileTab.classList.add('active');
+    linkTab.classList.remove('active');
+    fileSection.style.display = 'block';
+    linkSection.style.display = 'none';
+  } else {
+    linkTab.classList.add('active');
+    fileTab.classList.remove('active');
+    linkSection.style.display = 'block';
+    fileSection.style.display = 'none';
+  }
+}
+
 async function uploadPermanentFile() {
+  if (currentResourceType === 'link') {
+    await savePermanentLink();
+    return;
+  }
+  
   const fileInput = document.getElementById("permanentFileInput");
-  const label = document.getElementById("fileLabel").value.trim();
-  const taskAssociation = document.getElementById("fileTaskAssociation").value.trim();
+  const label = document.getElementById("resourceLabel").value.trim();
+  const taskAssociation = document.getElementById("resourceTaskAssociation").value.trim();
   
   if (!fileInput.files[0]) {
     alert('Please select a file to upload');
@@ -2317,6 +2625,7 @@ async function uploadPermanentFile() {
           path: path,
           size: file.size,
           type: file.type,
+          resourceType: 'file', // Mark as file resource
           uploadedBy: currentUser,
           uploadedAt: new Date()
         });
@@ -2332,27 +2641,70 @@ async function uploadPermanentFile() {
   }
 }
 
-async function deletePermanentFile(fileId) {
-  if (!confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+async function savePermanentLink() {
+  const linkUrl = document.getElementById("permanentLinkUrl").value.trim();
+  const label = document.getElementById("resourceLabel").value.trim();
+  const taskAssociation = document.getElementById("resourceTaskAssociation").value.trim();
+  
+  if (!linkUrl) {
+    alert('Please enter a URL');
     return;
   }
   
-  showLoading('Deleting file...');
+  // Validate URL format
+  try {
+    new URL(linkUrl);
+  } catch (e) {
+    alert('Please enter a valid URL (e.g., https://example.com)');
+    return;
+  }
+  
+  showLoading('Saving link...');
+  
+  try {
+    // Save link metadata to Firestore
+    await addDoc(filesCollection, {
+      name: label || linkUrl,
+      label: label || linkUrl,
+      taskAssociation: taskAssociation,
+      url: linkUrl,
+      resourceType: 'link', // Mark as link resource
+      uploadedBy: currentUser,
+      uploadedAt: new Date()
+    });
+    
+    hideLoading();
+    closeFileUploadModal();
+  } catch (error) {
+    console.error('Error saving permanent link:', error);
+    alert('Failed to save link. Please try again.');
+    hideLoading();
+  }
+}
+
+async function deletePermanentFile(fileId) {
+  if (!confirm('Are you sure you want to delete this resource? This action cannot be undone.')) {
+    return;
+  }
+  
+  showLoading('Deleting resource...');
   
   try {
     const file = permanentFiles.find(f => f.id === fileId);
-    if (!file) throw new Error('File not found');
+    if (!file) throw new Error('Resource not found');
     
-    // Delete from Storage
-    await deleteFileFromStorage(file.path);
+    // Delete from Storage only if it's a file (not a link)
+    if (file.resourceType !== 'link' && file.path) {
+      await deleteFileFromStorage(file.path);
+    }
     
     // Delete from Firestore
     await deleteDoc(doc(db, "permanentFiles", fileId));
     
     hideLoading();
   } catch (error) {
-    console.error('Error deleting permanent file:', error);
-    alert('Failed to delete file. Please try again.');
+    console.error('Error deleting permanent resource:', error);
+    alert('Failed to delete resource. Please try again.');
     hideLoading();
   }
 }

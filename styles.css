@@ -1778,6 +1778,36 @@ h1 {
   box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
 }
 
+/* Resource Modal Tabs */
+.resource-type-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.resource-tab {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--card-bg);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.resource-tab:hover {
+  background: var(--hover-bg);
+  border-color: var(--accent);
+}
+
+.resource-tab.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 .view-header {
   display: flex;
   justify-content: space-between;
@@ -1833,4 +1863,188 @@ h1 {
 .file-download-small:hover {
   background: #1d4ed8;
   transform: scale(1.1);
+}
+
+/* ---------- Review System Styles ---------- */
+.review-badge {
+  background: #ef4444;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 8px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+.review-card {
+  background: white;
+  border: 2px solid #3b82f6;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--bg);
+}
+
+.review-header h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.3rem;
+}
+
+.review-status {
+  background: #3b82f6;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.review-meta {
+  display: flex;
+  gap: 20px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.review-notes {
+  background: var(--bg);
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+.review-notes h4 {
+  margin: 0 0 8px 0;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.review-notes p {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+.review-files, .review-image, .review-links {
+  margin: 16px 0;
+}
+
+.review-files h4, .review-image h4, .review-links h4 {
+  margin: 0 0 12px 0;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.review-link {
+  display: block;
+  padding: 10px 14px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 8px 0;
+  color: var(--accent);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.review-link:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+
+.review-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 2px solid var(--bg);
+}
+
+.approve-btn, .reject-btn {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.approve-btn {
+  background: #10b981;
+  color: white;
+}
+
+.approve-btn:hover {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.reject-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.reject-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.no-reviews {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.flagged-notice {
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+
+.flagged-notice strong {
+  color: #b45309;
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+}
+
+.flagged-notice p {
+  margin: 0;
+  color: #78350f;
+  line-height: 1.5;
+}
+
+.flagged-badge {
+  background: #f59e0b;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 8px;
 }
