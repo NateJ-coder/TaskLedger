@@ -437,7 +437,8 @@ async function submitForReview() {
     for (let i = 0; i < fileInput.files.length; i++) {
       try {
         const file = fileInput.files[i];
-        const path = `review-submissions/${taskToCompleteId}/${Date.now()}_${file.name}`;
+        const sanitizedName = sanitizeFilename(file.name);
+        const path = `review-submissions/${taskToCompleteId}/${Date.now()}_${sanitizedName}`;
         const fileData = await uploadFileToStorage(file, path);
         reviewSubmission.files.push(fileData);
       } catch (error) {
@@ -1108,10 +1109,12 @@ async function sendMessage() {
     });
   } catch (error) {
     console.error("Error sending message:", error);
+    hideLoading();
     alert("Failed to send message. Please try again.");
     return;
   }
   
+  hideLoading();
   closeMessageModal();
   
   // Show "sent" confirmation
@@ -2086,6 +2089,15 @@ function initializeApp() {
 // FILE MANAGEMENT FUNCTIONS
 // ========================================
 
+// Sanitize filename to prevent CORS issues
+function sanitizeFilename(filename) {
+  // Replace spaces with underscores and remove special characters
+  return filename
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .replace(/__+/g, '_');
+}
+
 // Upload file to Storage and return download URL
 async function uploadFileToStorage(file, path) {
   const storageRef = ref(storage, path);
@@ -2122,7 +2134,8 @@ async function deleteFileFromStorage(filePath) {
 async function uploadTaskFile(taskId, file) {
   showLoading('Uploading file...');
   try {
-    const path = `tasks/${taskId}/${Date.now()}_${file.name}`;
+    const sanitizedName = sanitizeFilename(file.name);
+    const path = `tasks/${taskId}/${Date.now()}_${sanitizedName}`;
     const fileData = await uploadFileToStorage(file, path);
     
     // Save file reference to task
@@ -2145,7 +2158,8 @@ async function uploadTaskFile(taskId, file) {
 async function uploadMemoFile(taskId, file) {
   showLoading('Uploading file...');
   try {
-    const path = `memos/${taskId}/${Date.now()}_${file.name}`;
+    const sanitizedName = sanitizeFilename(file.name);
+    const path = `memos/${taskId}/${Date.now()}_${sanitizedName}`;
     const fileData = await uploadFileToStorage(file, path);
     
     const taskDoc = doc(db, "tasks", taskId);
@@ -2170,7 +2184,8 @@ async function uploadNeedsFile(taskId, needIndex, file) {
     const task = tasks.find(t => t.id === taskId);
     if (!task) throw new Error('Task not found');
     
-    const path = `needs/${taskId}/${needIndex}/${Date.now()}_${file.name}`;
+    const sanitizedName = sanitizeFilename(file.name);
+    const path = `needs/${taskId}/${needIndex}/${Date.now()}_${sanitizedName}`;
     const fileData = await uploadFileToStorage(file, path);
     
     // Update the specific need with file data
@@ -2598,7 +2613,8 @@ async function uploadPermanentFile() {
   progressDiv.style.display = "block";
   
   try {
-    const path = `permanentFiles/${currentUser}/${Date.now()}_${file.name}`;
+    const sanitizedName = sanitizeFilename(file.name);
+    const path = `permanentFiles/${currentUser}/${Date.now()}_${sanitizedName}`;
     const storageRef = ref(storage, path);
     const uploadTask = uploadBytesResumable(storageRef, file);
     
