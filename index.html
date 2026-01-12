@@ -47,21 +47,21 @@
           <span class="nav-text" id="currentUserName">User</span>
         </button>
       </div>
-      <div class="notifications-trigger" onclick="toggleNotificationsPanel()">
+      <button class="notifications-trigger" onclick="toggleNotificationsPanel()" aria-label="Open notifications panel" aria-expanded="false">
         <span class="notification-icon">🔔</span>
-        <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
-      </div>
+        <span class="notification-badge" id="notificationBadge" style="display: none;" aria-live="polite">0</span>
+      </button>
     </nav>
 
-    <aside class="notifications-panel" id="notificationsPanel">
+    <aside class="notifications-panel" id="notificationsPanel" role="complementary" aria-label="Notifications">
       <div class="notifications-header">
         <h3>Notifications</h3>
         <div class="notifications-header-actions">
-          <button class="clear-all-btn" onclick="clearAllNotifications()">Clear All</button>
-          <button class="close-notifications" onclick="toggleNotificationsPanel()">✕</button>
+          <button class="clear-all-btn" onclick="clearAllNotifications()" aria-label="Clear all notifications">Clear All</button>
+          <button class="close-notifications" onclick="toggleNotificationsPanel()" aria-label="Close notifications panel">✕</button>
         </div>
       </div>
-      <div class="notifications-body" id="notificationsList">
+      <div class="notifications-body" id="notificationsList" role="list">
         <p class="no-notifications">No new notifications</p>
       </div>
     </aside>
@@ -214,6 +214,19 @@
 
   <div id="sentConfirmation" class="sent-confirmation">
     Message sent! ✓
+  </div>
+
+  <div id="attachmentModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Add Link/Attachment</h2>
+      <p id="attachmentTaskTitle"></p>
+      <input id="attachmentName" placeholder="Link name (e.g., Project Doc, Email)" />
+      <input id="attachmentUrl" placeholder="URL (https://...)" type="url" />
+      <div class="modal-actions">
+        <button onclick="saveAttachment()">Add Link</button>
+        <button class="secondary" onclick="closeAttachmentModal()">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="firebase-config.js"></script>

@@ -38,6 +38,10 @@ window.saveMemo = saveMemo;
 window.openNeedsModal = openNeedsModal;
 window.closeNeedsModal = closeNeedsModal;
 window.saveNeeds = saveNeeds;
+window.openAttachmentModal = openAttachmentModal;
+window.closeAttachmentModal = closeAttachmentModal;
+window.saveAttachment = saveAttachment;
+window.removeAttachment = removeAttachment;
 window.openNotificationDetail = openNotificationDetail;
 window.closeNotificationDetail = closeNotificationDetail;
 window.openMessageModal = openMessageModal;
@@ -51,10 +55,12 @@ window.clearAllNotifications = clearAllNotifications;
 let currentUser = null;
 let tasks = [];
 let notifications = [];
+let messages = [];
 let taskToCompleteId = null;
 let taskToUpdateId = null;
 let taskToEditMemoId = null;
 let taskToEditNeedsId = null;
+let taskToAddAttachmentId = null;
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
 const messagesCollection = collection(db, "messages");
@@ -113,6 +119,14 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll('input, textarea').forEach(element => {
     element.addEventListener('wheel', (e) => {}, { passive: true });
     element.addEventListener('touchstart', (e) => {}, { passive: true });
+  });
+  
+  // Add keyboard support for closing notification panel with Escape
+  document.addEventListener('keydown', (e) => {
+    const notificationsPanel = document.getElementById("notificationsPanel");
+    if (e.key === 'Escape' && notificationsPanel && notificationsPanel.classList.contains('open')) {
+      toggleNotificationsPanel();
+    }
   });
 });
 
@@ -231,21 +245,27 @@ async function addTask() {
     updates: [],
     owner: currentUser,
     createdBy: currentUser,
+    attachments: [], // Initialize empty attachments array
   });
 
   // Determine recipient (the other user)
   const recipient = currentUser === "Nate" ? "Craig" : "Nate";
 
   // Create notification for new task
-  await addDoc(notificationsCollection, {
-    type: "task",
-    taskId: newTask.id,
-    message: `${currentUser} added a new task: ${title}`,
-    createdAt: new Date(),
-    read: false,
-    recipient: recipient,
-    sender: currentUser,
-  });
+  try {
+    await addDoc(notificationsCollection, {
+      type: "task",
+      taskId: newTask.id,
+      message: `${currentUser} added a new task: ${title}`,
+      createdAt: new Date(),
+      read: false,
+      recipient: recipient,
+      sender: currentUser,
+    });
+  } catch (error) {
+    console.error("Error creating notification:", error);
+    // Don't fail the whole operation if notification fails
+  }
 
   closeAddTaskModal();
 }
@@ -375,6 +395,7 @@ function closeMemoModal() {
 async function saveMemo() {
   if (!taskToEditMemoId) return;
 
+  const task = tasks.find(t => t.id === taskToEditMemoId);
   const memoText = document.getElementById("memoText").value.trim();
   const taskDoc = doc(db, "tasks", taskToEditMemoId);
 
@@ -382,7 +403,101 @@ async function saveMemo() {
     description: memoText,
   });
 
+  // Send notification to the other user about memo update
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  
+  await addDoc(notificationsCollection, {
+    type: "memo_updated",
+    taskId: taskToEditMemoId,
+    message: `${currentUser} updated memo for "${task.title}"`,
+    createdAt: new Date(),
+    read: false,
+    recipient: recipient,
+    sender: currentUser,
+  });
+
   closeMemoModal();
+}
+
+// -----------------------------
+// Attachment Modal Logic
+// -----------------------------
+function openAttachmentModal(id) {
+  const task = tasks.find(t => t.id === id);
+  taskToAddAttachmentId = id;
+  document.getElementById("attachmentTaskTitle").textContent = `Add link for: ${task.title}`;
+  document.getElementById("attachmentModal").style.display = "flex";
+}
+
+function closeAttachmentModal() {
+  document.getElementById("attachmentModal").style.display = "none";
+  document.getElementById("attachmentName").value = "";
+  document.getElementById("attachmentUrl").value = "";
+  taskToAddAttachmentId = null;
+}
+
+async function saveAttachment() {
+  if (!taskToAddAttachmentId) return;
+
+  const task = tasks.find(t => t.id === taskToAddAttachmentId);
+  const name = document.getElementById("attachmentName").value.trim();
+  const url = document.getElementById("attachmentUrl").value.trim();
+
+  if (!name || !url) {
+    alert("Please provide both a name and URL");
+    return;
+  }
+
+  const attachments = task.attachments || [];
+  attachments.push({
+    name,
+    url,
+    addedBy: currentUser,
+    addedAt: new Date(),
+  });
+
+  const taskDoc = doc(db, "tasks", taskToAddAttachmentId);
+  await updateDoc(taskDoc, { attachments });
+
+  // Send notification to the other user
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  
+  await addDoc(notificationsCollection, {
+    type: "attachment_added",
+    taskId: taskToAddAttachmentId,
+    message: `${currentUser} added link "${name}" to "${task.title}"`,
+    createdAt: new Date(),
+    read: false,
+    recipient: recipient,
+    sender: currentUser,
+  });
+
+  closeAttachmentModal();
+}
+
+async function removeAttachment(taskId, attachmentIndex) {
+  const task = tasks.find(t => t.id === taskId);
+  const attachments = [...(task.attachments || [])];
+  
+  if (!attachments[attachmentIndex]) return;
+  
+  const removed = attachments.splice(attachmentIndex, 1)[0];
+  
+  const taskDoc = doc(db, "tasks", taskId);
+  await updateDoc(taskDoc, { attachments });
+  
+  // Send notification
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  
+  await addDoc(notificationsCollection, {
+    type: "attachment_removed",
+    taskId: taskId,
+    message: `${currentUser} removed link "${removed.name}" from "${task.title}"`,
+    createdAt: new Date(),
+    read: false,
+    recipient: recipient,
+    sender: currentUser,
+  });
 }
 
 // -----------------------------
@@ -561,30 +676,59 @@ async function changeNeedPriority(taskId, needIndex) {
 // -----------------------------
 function toggleNotificationsPanel() {
   const panel = document.getElementById("notificationsPanel");
-  panel.classList.toggle("open");
+  const trigger = document.querySelector(".notifications-trigger");
+  const isOpen = panel.classList.toggle("open");
+  
+  // Update aria-expanded for accessibility
+  if (trigger) {
+    trigger.setAttribute("aria-expanded", isOpen);
+  }
 }
 
 async function markNotificationRead(notificationId) {
   if (notificationId) {
-    const notificationDoc = doc(db, "notifications", notificationId);
-    await updateDoc(notificationDoc, { read: true });
+    try {
+      const notificationDoc = doc(db, "notifications", notificationId);
+      await updateDoc(notificationDoc, { read: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
   }
 }
 
 async function clearAllNotifications() {
-  if (!confirm("Clear all notifications? This cannot be undone.")) return;
+  if (!confirm("Clear all notifications? This will mark all as read.")) return;
   
-  const q = query(
-    notificationsCollection,
-    where("recipient", "==", currentUser)
-  );
-  const snapshot = await getDocs(q);
-  
-  const deletePromises = snapshot.docs.map(doc => 
-    updateDoc(doc.ref, { read: true })
-  );
-  
-  await Promise.all(deletePromises);
+  try {
+    const q = query(
+      notificationsCollection,
+      where("recipient", "==", currentUser)
+    );
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      alert("No notifications to clear.");
+      return;
+    }
+    
+    const updatePromises = snapshot.docs.map(doc => 
+      updateDoc(doc.ref, { read: true })
+    );
+    
+    await Promise.all(updatePromises);
+    
+    // Show success feedback
+    const confirmation = document.getElementById("sentConfirmation");
+    confirmation.textContent = "All notifications cleared! ✓";
+    confirmation.classList.add("show");
+    setTimeout(() => {
+      confirmation.classList.remove("show");
+      confirmation.textContent = "Message sent! ✓";
+    }, 2000);
+  } catch (error) {
+    console.error("Error clearing notifications:", error);
+    alert("Failed to clear notifications. Please try again.");
+  }
 }
 
 function openNotificationDetail(notificationId) {
@@ -597,14 +741,28 @@ function openNotificationDetail(notificationId) {
   let detailHTML = `
     <div class="notification-detail">
       <p><strong>Type:</strong> ${formatNotificationType(notification.type)}</p>
-      <p><strong>Message:</strong> ${notification.message}</p>
+      <p><strong>From:</strong> ${notification.sender || 'System'}</p>
       <p><strong>Time:</strong> ${new Date(notification.createdAt.seconds * 1000).toLocaleString()}</p>
   `;
   
+  // Show full message for message-type notifications
+  if (notification.type === "message" && notification.fullMessage) {
+    detailHTML += `
+      <div class="message-content">
+        <p><strong>Message:</strong></p>
+        <div class="message-text">${notification.fullMessage}</div>
+      </div>
+    `;
+  } else {
+    detailHTML += `<p><strong>Message:</strong> ${notification.message}</p>`;
+  }
+  
   if (task) {
     detailHTML += `
-      <p><strong>Task:</strong> ${task.title}</p>
+      <hr style="margin: 16px 0; border: none; border-top: 1px solid var(--border);">
+      <p><strong>Related Task:</strong> ${task.title}</p>
       <p><strong>Priority:</strong> ${task.priority || 'medium'}</p>
+      <button onclick="navigateToTask('${task.id}', '${notificationId}')" class="navigate-btn">Go to Task</button>
     `;
   }
   
@@ -630,6 +788,9 @@ function formatNotificationType(type) {
     priority_auto_escalated: "Priority Auto-Escalated",
     need_priority_change: "Need Priority Changed",
     needs_updated: "Needs Updated",
+    memo_updated: "Memo Updated",
+    attachment_added: "Link Added",
+    attachment_removed: "Link Removed",
     deadline_warning: "Deadline Warning",
     deadline_today: "Due Today",
     deadline_overdue: "Overdue",
@@ -671,28 +832,39 @@ function closeMessageModal() {
 
 async function sendMessage() {
   const messageText = document.getElementById("messageText").value.trim();
-  if (!messageText) return;
+  if (!messageText) {
+    alert("Please enter a message");
+    return;
+  }
   
   const recipient = currentUser === "Nate" ? "Craig" : "Nate";
   
-  // Save message to Firestore
-  await addDoc(messagesCollection, {
-    sender: currentUser,
-    recipient: recipient,
-    message: messageText,
-    createdAt: new Date(),
-    read: false,
-  });
-  
-  // Create notification for recipient
-  await addDoc(notificationsCollection, {
-    type: "message",
-    message: `New message from ${currentUser}: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}`,
-    createdAt: new Date(),
-    read: false,
-    recipient: recipient,
-    sender: currentUser,
-  });
+  try {
+    // Save message to Firestore
+    const messageDoc = await addDoc(messagesCollection, {
+      sender: currentUser,
+      recipient: recipient,
+      message: messageText,
+      createdAt: new Date(),
+      read: false,
+    });
+    
+    // Create notification for recipient with messageId reference
+    await addDoc(notificationsCollection, {
+      type: "message",
+      messageId: messageDoc.id,
+      message: `New message from ${currentUser}: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}`,
+      fullMessage: messageText,
+      createdAt: new Date(),
+      read: false,
+      recipient: recipient,
+      sender: currentUser,
+    });
+  } catch (error) {
+    console.error("Error sending message:", error);
+    alert("Failed to send message. Please try again.");
+    return;
+  }
   
   closeMessageModal();
   
@@ -781,6 +953,22 @@ function renderTasks(tasksToRender) {
       </div>
     ` : "";
 
+    // Render attachments
+    const attachments = task.attachments || [];
+    const attachmentsHTML = attachments.length > 0 ? `
+      <div class="attachments-section">
+        <div class="toggle" onclick="toggleSection('${task.id}', 'attachments')">🔗 Links (${attachments.length})</div>
+        <div class="attachments-list" id="attachments-${task.id}" style="display: none;">
+          ${attachments.map((att, index) => `
+            <div class="attachment-item">
+              <a href="${att.url}" target="_blank" rel="noopener noreferrer">${att.name}</a>
+              <button class="remove-attachment-btn" onclick="removeAttachment('${task.id}', ${index})">✕</button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    ` : "";
+
     div.innerHTML = `
       <div class="task-header">
         <div>
@@ -790,10 +978,13 @@ function renderTasks(tasksToRender) {
         </div>
         <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
       </div>
+      ${updateHistoryHTML}
+      ${attachmentsHTML}
       <div class="task-actions">
         <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
         <button onclick="openMemoModal('${task.id}')">📝 ${task.description ? 'Edit' : 'Add'} Memo</button>
         <button onclick="openNeedsModal('${task.id}')">📌 Edit Needs</button>
+        <button onclick="openAttachmentModal('${task.id}')">🔗 Add Link</button>
         <button class="priority-change-btn" onclick="changeTaskPriority('${task.id}')">🚩 Change Task Priority</button>
       </div>
     `;
@@ -985,11 +1176,11 @@ function renderNotifications(docs) {
       notificationClass += " notification-message";
     }
     
-    // Add mark as read button only for unread
-    const markReadBtn = !notification.read ? `<button class="mark-read-btn" onclick="event.stopPropagation(); markNotificationRead('${notificationId}')">✓</button>` : '';
+    // Add mark as read button only for unread with accessibility
+    const markReadBtn = !notification.read ? `<button class="mark-read-btn" onclick="event.stopPropagation(); markNotificationRead('${notificationId}')" aria-label="Mark notification as read" title="Mark as read">✓</button>` : '';
     
     return `
-      <div class="${notificationClass}" ${clickHandler}>
+      <div class="${notificationClass}" ${clickHandler} role="listitem" tabindex="0" onkeypress="if(event.key === 'Enter') openNotificationDetail('${notificationId}')">
         <div class="notification-content">
           <div class="notification-title">${message}</div>
           <div class="notification-time">${timeAgo}</div>
@@ -1218,6 +1409,23 @@ function initializeApp() {
     renderNotifications([...unreadDocs, ...readDocs]);
   }, (error) => {
     console.log("Error fetching notifications:", error);
+    console.log("If you see an index error, please create the composite index in Firebase Console");
+    console.log("Or check the error message for a direct link to create it");
+  });
+
+  // Listen for messages addressed to current user
+  const messagesQuery = query(
+    messagesCollection,
+    where("recipient", "==", currentUser),
+    orderBy("createdAt", "desc")
+  );
+
+  onSnapshot(messagesQuery, (snapshot) => {
+    messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log(`${messages.length} message(s) received for ${currentUser}`);
+  }, (error) => {
+    console.log("Error fetching messages:", error);
+    console.log("If you see an index error, please create the composite index in Firebase Console");
   });
 
   // Run deadline check periodically (every hour)
