@@ -14,6 +14,7 @@ import {
 // -----------------------------
 // Make functions available to the browser
 // -----------------------------
+window.logout = logout;
 window.addTask = addTask;
 window.toggleDone = toggleDone;
 window.toggleSection = toggleSection;
@@ -29,6 +30,7 @@ window.toggleNotificationsPanel = toggleNotificationsPanel;
 window.changeTaskPriority = changeTaskPriority;
 window.changeNeedPriority = changeNeedPriority;
 window.navigateToTask = navigateToTask;
+window.markNotificationRead = markNotificationRead;
 window.handlePriorityChange = handlePriorityChange;
 window.openMemoModal = openMemoModal;
 window.closeMemoModal = closeMemoModal;
@@ -36,10 +38,17 @@ window.saveMemo = saveMemo;
 window.openNeedsModal = openNeedsModal;
 window.closeNeedsModal = closeNeedsModal;
 window.saveNeeds = saveNeeds;
+window.openNotificationDetail = openNotificationDetail;
+window.closeNotificationDetail = closeNotificationDetail;
+window.openMessageModal = openMessageModal;
+window.closeMessageModal = closeMessageModal;
+window.sendMessage = sendMessage;
+window.clearAllNotifications = clearAllNotifications;
 
 // -----------------------------
 // Global state
 // -----------------------------
+let currentUser = null;
 let tasks = [];
 let notifications = [];
 let taskToCompleteId = null;
@@ -48,11 +57,37 @@ let taskToEditMemoId = null;
 let taskToEditNeedsId = null;
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
+const messagesCollection = collection(db, "messages");
+
+// -----------------------------
+// Login/Logout Functions
+// -----------------------------
+function logout() {
+  if (confirm(`Logout ${currentUser}?`)) {
+    currentUser = null;
+    localStorage.removeItem("taskledger_user");
+    window.location.href = "login.html";
+  }
+}
+
+function checkLogin() {
+  const savedUser = localStorage.getItem("taskledger_user");
+  if (savedUser) {
+    currentUser = savedUser;
+    document.getElementById("currentUserName").textContent = savedUser;
+    initializeApp();
+  } else {
+    // Redirect to login page if not logged in
+    window.location.href = "login.html";
+  }
+}
 
 // -----------------------------
 // Navigation
 // -----------------------------
 document.addEventListener("DOMContentLoaded", () => {
+  checkLogin();
+  
   const navLinks = document.querySelectorAll(".nav-link");
   const views = document.querySelectorAll(".view");
 
@@ -194,15 +229,22 @@ async function addTask() {
     createdAt: new Date(),
     completionNotes: "",
     updates: [],
+    owner: currentUser,
+    createdBy: currentUser,
   });
+
+  // Determine recipient (the other user)
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
 
   // Create notification for new task
   await addDoc(notificationsCollection, {
     type: "task",
     taskId: newTask.id,
-    message: `New task added: ${title}`,
+    message: `${currentUser} added a new task: ${title}`,
     createdAt: new Date(),
     read: false,
+    recipient: recipient,
+    sender: currentUser,
   });
 
   closeAddTaskModal();
@@ -251,12 +293,15 @@ async function saveCompletionDetails() {
   });
   
   // Create notification for completion
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
   await addDoc(notificationsCollection, {
     type: "completion",
     taskId: taskToCompleteId,
-    message: `Task completed: ${task.title}`,
+    message: `${currentUser} completed task: ${task.title}`,
     createdAt: new Date(),
     read: false,
+    recipient: recipient,
+    sender: currentUser,
   });
 
   closeCompletionModal();
@@ -296,12 +341,15 @@ async function saveUpdate() {
   await updateDoc(taskDoc, { updates });
   
   // Create notification for update
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
   await addDoc(notificationsCollection, {
     type: "update",
     taskId: taskToUpdateId,
-    message: `Update posted on "${task.title}"`,
+    message: `${currentUser} posted update on "${task.title}"`,
     createdAt: new Date(),
     read: false,
+    recipient: recipient,
+    sender: currentUser,
   });
   
   closeUpdateModal();
@@ -438,12 +486,15 @@ async function changeTaskPriority(taskId) {
   const taskDoc = doc(db, "tasks", taskId);
   await updateDoc(taskDoc, { priority: selectedPriority });
   
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
   await addDoc(notificationsCollection, {
     type: "priority_change",
     taskId: taskId,
-    message: `Task priority changed: "${task.title}" is now ${priorityNames[selectedPriority]}`,
+    message: `${currentUser} changed priority: "${task.title}" is now ${priorityNames[selectedPriority]}`,
     createdAt: new Date(),
     read: false,
+    recipient: recipient,
+    sender: currentUser,
   });
 }
 
@@ -479,49 +530,101 @@ async function changeNeedPriority(taskId, needIndex) {
   const taskDoc = doc(db, "tasks", taskId);
   await updateDoc(taskDoc, { needs });
   
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
   await addDoc(notificationsCollection, {
     type: "need_priority_change",
     taskId: taskId,
-    message: `Need priority changed in "${task.title}" to ${priorityNames[selectedPriority]}`,
+    message: `${currentUser} changed need priority in "${task.title}" to ${priorityNames[selectedPriority]}`,
     createdAt: new Date(),
     read: false,
+    recipient: recipient,
+    sender: currentUser,
   });
 }
 
 // -----------------------------
 // Notifications Panel
 // -----------------------------
-async function toggleNotificationsPanel() {
+function toggleNotificationsPanel() {
   const panel = document.getElementById("notificationsPanel");
-  const isOpen = panel.classList.toggle("open");
-
-  if (isOpen) {
-    // Mark all unread notifications as read
-    const allNotificationsQuery = query(notificationsCollection);
-    const snapshot = await getDocs(allNotificationsQuery);
-    
-    const updatePromises = [];
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (data.read === false) {
-        updatePromises.push(
-          updateDoc(doc(db, "notifications", docSnap.id), { read: true })
-        );
-      }
-    });
-    
-    if (updatePromises.length > 0) {
-      await Promise.all(updatePromises);
-    }
-  }
+  panel.classList.toggle("open");
 }
 
-async function navigateToTask(taskId, notificationId) {
-  // Mark notification as read
+async function markNotificationRead(notificationId) {
   if (notificationId) {
     const notificationDoc = doc(db, "notifications", notificationId);
     await updateDoc(notificationDoc, { read: true });
   }
+}
+
+async function clearAllNotifications() {
+  if (!confirm("Clear all notifications? This cannot be undone.")) return;
+  
+  const q = query(
+    notificationsCollection,
+    where("recipient", "==", currentUser)
+  );
+  const snapshot = await getDocs(q);
+  
+  const deletePromises = snapshot.docs.map(doc => 
+    updateDoc(doc.ref, { read: true })
+  );
+  
+  await Promise.all(deletePromises);
+}
+
+function openNotificationDetail(notificationId) {
+  const notification = notifications.find(n => n.id === notificationId);
+  if (!notification) return;
+  
+  const content = document.getElementById("notificationDetailContent");
+  const task = tasks.find(t => t.id === notification.taskId);
+  
+  let detailHTML = `
+    <div class="notification-detail">
+      <p><strong>Type:</strong> ${formatNotificationType(notification.type)}</p>
+      <p><strong>Message:</strong> ${notification.message}</p>
+      <p><strong>Time:</strong> ${new Date(notification.createdAt.seconds * 1000).toLocaleString()}</p>
+  `;
+  
+  if (task) {
+    detailHTML += `
+      <p><strong>Task:</strong> ${task.title}</p>
+      <p><strong>Priority:</strong> ${task.priority || 'medium'}</p>
+    `;
+  }
+  
+  detailHTML += `</div>`;
+  content.innerHTML = detailHTML;
+  
+  document.getElementById("notificationDetailModal").style.display = "flex";
+  
+  // Mark as read when viewing
+  markNotificationRead(notificationId);
+}
+
+function closeNotificationDetail() {
+  document.getElementById("notificationDetailModal").style.display = "none";
+}
+
+function formatNotificationType(type) {
+  const types = {
+    task: "New Task",
+    update: "Task Update",
+    completion: "Task Completed",
+    priority_change: "Priority Changed",
+    need_priority_change: "Need Priority Changed",
+    deadline_warning: "Deadline Warning",
+    deadline_today: "Due Today",
+    deadline_overdue: "Overdue",
+    message: "Message"
+  };
+  return types[type] || type;
+}
+
+async function navigateToTask(taskId, notificationId) {
+  // Mark notification as read
+  await markNotificationRead(notificationId);
   
   // Close notification panel
   toggleNotificationsPanel();
@@ -534,6 +637,55 @@ function toggleSection(id, section) {
   const el = document.getElementById(`${section}-${id}`);
   const isOpen = el.style.display === "block";
   el.style.display = isOpen ? "none" : "block";
+}
+
+// -----------------------------
+// Messaging Functions
+// -----------------------------
+function openMessageModal() {
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  document.getElementById("messageRecipient").textContent = `To: ${recipient}`;
+  document.getElementById("messageModal").style.display = "flex";
+}
+
+function closeMessageModal() {
+  document.getElementById("messageModal").style.display = "none";
+  document.getElementById("messageText").value = "";
+}
+
+async function sendMessage() {
+  const messageText = document.getElementById("messageText").value.trim();
+  if (!messageText) return;
+  
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  
+  // Save message to Firestore
+  await addDoc(messagesCollection, {
+    sender: currentUser,
+    recipient: recipient,
+    message: messageText,
+    createdAt: new Date(),
+    read: false,
+  });
+  
+  // Create notification for recipient
+  await addDoc(notificationsCollection, {
+    type: "message",
+    message: `New message from ${currentUser}: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}`,
+    createdAt: new Date(),
+    read: false,
+    recipient: recipient,
+    sender: currentUser,
+  });
+  
+  closeMessageModal();
+  
+  // Show "sent" confirmation
+  const confirmation = document.getElementById("sentConfirmation");
+  confirmation.classList.add("show");
+  setTimeout(() => {
+    confirmation.classList.remove("show");
+  }, 2000);
 }
 
 // -----------------------------
@@ -780,9 +932,12 @@ function jumpTo(view, id) {
 // -----------------------------
 function renderNotifications(docs) {
   const list = document.getElementById("notificationsList");
+  
+  // Store notifications globally for access in detail modal
+  notifications = docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
   if (!docs || docs.length === 0) {
-    list.innerHTML = `<p class="no-notifications">No new notifications</p>`;
+    list.innerHTML = `<p class="no-notifications">No notifications</p>`;
     return;
   }
 
@@ -801,20 +956,29 @@ function renderNotifications(docs) {
     const taskId = notification.taskId || "";
     const notificationId = notification.id || "";
     
-    const clickHandler = taskId ? `onclick="navigateToTask('${taskId}', '${notificationId}')"` : '';
+    // Click to open detail modal
+    const clickHandler = `onclick="openNotificationDetail('${notificationId}')"`;
     
     // Add special styling for deadline notifications
-    let notificationClass = `notification-item ${!notification.read ? "unread" : ""}`;
+    let notificationClass = `notification-item ${!notification.read ? "unread" : "read"}`;
     if (notification.type === "deadline_today" || notification.type === "deadline_overdue") {
       notificationClass += " notification-urgent";
     } else if (notification.type === "deadline_warning") {
       notificationClass += " notification-warning";
+    } else if (notification.type === "message") {
+      notificationClass += " notification-message";
     }
+    
+    // Add mark as read button only for unread
+    const markReadBtn = !notification.read ? `<button class="mark-read-btn" onclick="event.stopPropagation(); markNotificationRead('${notificationId}')">✓</button>` : '';
     
     return `
       <div class="${notificationClass}" ${clickHandler}>
-        <div class="notification-title">${message}</div>
-        <div class="notification-time">${timeAgo}</div>
+        <div class="notification-content">
+          <div class="notification-title">${message}</div>
+          <div class="notification-time">${timeAgo}</div>
+        </div>
+        ${markReadBtn}
       </div>
     `;
   }).join("");
@@ -857,6 +1021,8 @@ async function checkDeadlineNotifications() {
         message: `⚠️ Deadline approaching: "${task.title}" is due tomorrow`,
         createdAt: new Date(),
         read: false,
+        recipient: task.owner || currentUser,
+        sender: "system",
       });
       
       // Mark that we sent this notification
@@ -876,6 +1042,8 @@ async function checkDeadlineNotifications() {
         message: `🚨 URGENT: "${task.title}" is due TODAY!`,
         createdAt: new Date(),
         read: false,
+        recipient: task.owner || currentUser,
+        sender: "system",
       });
       
       // Mark that we sent this notification
@@ -895,6 +1063,8 @@ async function checkDeadlineNotifications() {
         message: `⏰ High priority task: "${task.title}" is due in 3 days`,
         createdAt: new Date(),
         read: false,
+        recipient: task.owner || currentUser,
+        sender: "system",
       });
       
       const taskDoc = doc(db, "tasks", task.id);
@@ -913,6 +1083,8 @@ async function checkDeadlineNotifications() {
         message: `❗ OVERDUE: "${task.title}" was due ${Math.abs(daysUntil)} day${Math.abs(daysUntil) > 1 ? 's' : ''} ago`,
         createdAt: new Date(),
         read: false,
+        recipient: task.owner || currentUser,
+        sender: "system",
       });
       
       const taskDoc = doc(db, "tasks", task.id);
@@ -939,64 +1111,79 @@ function scheduleDeadlineCheck() {
 // -----------------------------
 // Fetch and listen for real-time updates
 // -----------------------------
-const q = query(tasksCollection, orderBy("createdAt", "desc"));
-onSnapshot(q, (snapshot) => {
-  tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  const activeTasks = tasks.filter(t => !t.done);
-  const completedTasks = tasks.filter(t => t.done);
+function initializeApp() {
+  if (!currentUser) return;
 
-  renderTasks(activeTasks);
-  renderUpdates(tasks);
-  renderMemos(tasks); // Memos view shows all tasks with descriptions
-  renderNeeds(activeTasks);
-  renderCompleted(completedTasks);
-  
-  // Check for deadline notifications
-  scheduleDeadlineCheck();
-}, (error) => {
-  console.log("Error fetching tasks:", error);
-});
+  const q = query(tasksCollection, orderBy("createdAt", "desc"));
+  onSnapshot(q, (snapshot) => {
+    // Filter tasks for current user
+    tasks = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter(task => !task.owner || task.owner === currentUser);
+    
+    const activeTasks = tasks.filter(t => !t.done);
+    const completedTasks = tasks.filter(t => t.done);
 
-// Listen for all notifications (we'll filter unread in the render function)
-const notificationsQuery = query(
-  notificationsCollection,
-  orderBy("createdAt", "desc")
-);
+    renderTasks(activeTasks);
+    renderUpdates(tasks);
+    renderMemos(tasks); // Memos view shows all tasks with descriptions
+    renderNeeds(activeTasks);
+    renderCompleted(completedTasks);
+    
+    // Check for deadline notifications
+    scheduleDeadlineCheck();
+  }, (error) => {
+    console.log("Error fetching tasks:", error);
+  });
 
-onSnapshot(notificationsQuery, (snapshot) => {
-  const allNotifications = snapshot.docs;
-  const unreadDocs = allNotifications.filter(doc => !doc.data().read);
-  
-  const badge = document.getElementById("notificationBadge");
-  const count = unreadDocs.length;
+  // Listen for all notifications for current user
+  const notificationsQuery = query(
+    notificationsCollection,
+    where("recipient", "==", currentUser),
+    orderBy("createdAt", "desc")
+  );
 
-  if (count > 0) {
-    badge.textContent = count;
-    badge.style.display = "flex";
-  } else {
-    badge.style.display = "none";
-  }
+  onSnapshot(notificationsQuery, (snapshot) => {
+    const allNotifications = snapshot.docs;
+    
+    // Separate read and unread
+    const unreadDocs = allNotifications.filter(doc => !doc.data().read);
+    const readDocs = allNotifications.filter(doc => doc.data().read);
+    
+    const badge = document.getElementById("notificationBadge");
+    const count = unreadDocs.length;
 
-  renderNotifications(unreadDocs);
-}, (error) => {
-  console.log("Error fetching notifications:", error);
-});
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = "flex";
+    } else {
+      badge.style.display = "none";
+    }
 
-// Run deadline check periodically (every hour)
-setInterval(() => {
-  if (tasks.length > 0) {
-    checkDeadlineNotifications().catch(err => {
-      console.error("Periodic deadline check error:", err);
-    });
-  }
-}, 60 * 60 * 1000); // Check every hour
+    // Render with unread first, then read
+    renderNotifications([...unreadDocs, ...readDocs]);
+  }, (error) => {
+    console.log("Error fetching notifications:", error);
+  });
 
-// Also check deadlines when page becomes visible again
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && tasks.length > 0) {
-    checkDeadlineNotifications().catch(err => {
-      console.error("Visibility deadline check error:", err);
-    });
+  // Run deadline check periodically (every hour)
+  setInterval(() => {
+    if (tasks.length > 0) {
+      checkDeadlineNotifications().catch(err => {
+        console.error("Periodic deadline check error:", err);
+      });
+    }
+  }, 60 * 60 * 1000); // Check every hour
+
+  // Also check deadlines when page becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && tasks.length > 0) {
+      checkDeadlineNotifications().catch(err => {
+        console.error("Visibility deadline check error:", err);
+      });
+    }
+  });
+}
   }
 });
 

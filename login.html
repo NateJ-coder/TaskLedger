@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TaskLedger - Login</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <style>
+    :root {
+      --accent: #2563eb;
+      --text: #1f2933;
+      --muted: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .login-container {
+      background: white;
+      padding: 60px 50px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      text-align: center;
+      max-width: 450px;
+      width: 90%;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin: 0 0 10px;
+      color: var(--accent);
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 40px;
+      font-size: 1rem;
+    }
+
+    .prompt {
+      font-size: 1.1rem;
+      color: var(--text);
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    input[type="text"] {
+      padding: 16px 20px;
+      font-size: 1.1rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      transition: all 0.3s;
+      text-align: center;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 16px 30px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .error-message {
+      color: #ef4444;
+      font-size: 0.9rem;
+      margin-top: -10px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <h1>TaskLedger</h1>
+    <p class="subtitle">Welcome back!</p>
+    <p class="prompt">Are you Nate or Craig?</p>
+    
+    <form class="login-form" id="loginForm">
+      <input 
+        type="text" 
+        id="usernameInput" 
+        placeholder="Enter your name..."
+        autocomplete="off"
+        autofocus
+      />
+      <div class="error-message" id="errorMessage">
+        Please enter either "Nate" or "Craig"
+      </div>
+      <button type="submit">Sign In</button>
+    </form>
+    
+    <p class="hint">Type "Nate" or "Craig" and press Enter</p>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const input = document.getElementById('usernameInput');
+    const errorMessage = document.getElementById('errorMessage');
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const username = input.value.trim();
+      const normalizedUsername = username.charAt(0).toUpperCase() + username.slice(1).toLowerCase();
+      
+      if (normalizedUsername === 'Nate' || normalizedUsername === 'Craig') {
+        // Store the username
+        localStorage.setItem('taskledger_user', normalizedUsername);
+        
+        // Redirect to main app
+        window.location.href = 'index.html';
+      } else {
+        // Show error
+        errorMessage.classList.add('show');
+        input.value = '';
+        input.style.borderColor = '#ef4444';
+        
+        setTimeout(() => {
+          errorMessage.classList.remove('show');
+          input.style.borderColor = '#e5e7eb';
+        }, 3000);
+      }
+    });
+
+    // Check if already logged in
+    const savedUser = localStorage.getItem('taskledger_user');
+    if (savedUser) {
+      window.location.href = 'index.html';
+    }
+  </script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js");
+      });
+    }
+  </script>
+</body>
+</html>

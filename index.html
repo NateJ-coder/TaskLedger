@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Shared Task Board</title>
+  <title>TaskLedger</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#2563eb">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app-container">
+  <div class="app-container" id="appContainer">
     <nav class="sidebar">
       <div class="sidebar-header">
         <h2 class="sidebar-logo">TL</h2>
@@ -37,6 +37,16 @@
           <span class="nav-text">Completed</span>
         </a></li>
       </ul>
+      <div class="sidebar-footer">
+        <button class="message-btn" onclick="openMessageModal()">
+          <span class="nav-icon">💬</span>
+          <span class="nav-text">Send Message</span>
+        </button>
+        <button class="logout-btn" onclick="logout()">
+          <span class="nav-icon">👤</span>
+          <span class="nav-text" id="currentUserName">User</span>
+        </button>
+      </div>
       <div class="notifications-trigger" onclick="toggleNotificationsPanel()">
         <span class="notification-icon">🔔</span>
         <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
@@ -46,7 +56,10 @@
     <aside class="notifications-panel" id="notificationsPanel">
       <div class="notifications-header">
         <h3>Notifications</h3>
-        <button class="close-notifications" onclick="toggleNotificationsPanel()">✕</button>
+        <div class="notifications-header-actions">
+          <button class="clear-all-btn" onclick="clearAllNotifications()">Clear All</button>
+          <button class="close-notifications" onclick="toggleNotificationsPanel()">✕</button>
+        </div>
       </div>
       <div class="notifications-body" id="notificationsList">
         <p class="no-notifications">No new notifications</p>
@@ -175,6 +188,32 @@
         <button class="secondary" onclick="closeNeedsModal()">Cancel</button>
       </div>
     </div>
+  </div>
+
+  <div id="notificationDetailModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Notification Details</h2>
+      <div id="notificationDetailContent"></div>
+      <div class="modal-actions">
+        <button onclick="closeNotificationDetail()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="messageModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Send Message</h2>
+      <p id="messageRecipient"></p>
+      <textarea id="messageText" placeholder="Type your message here..." rows="6"></textarea>
+      <div class="modal-actions">
+        <button onclick="sendMessage()">Send Message</button>
+        <button class="secondary" onclick="closeMessageModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sentConfirmation" class="sent-confirmation">
+    Message sent! ✓
   </div>
 
   <script type="module" src="firebase-config.js"></script>
