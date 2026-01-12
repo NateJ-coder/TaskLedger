@@ -18,7 +18,21 @@
         <li><a href="#" class="nav-link" data-view="updates">📣 Updates</a></li>
         <li><a href="#" class="nav-link" data-view="completed">🎉 Completed</a></li>
       </ul>
+      <div class="notifications-trigger" onclick="toggleNotificationsPanel()">
+        <span class="notification-icon">🔔</span>
+        <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+      </div>
     </nav>
+
+    <aside class="notifications-panel" id="notificationsPanel">
+      <div class="notifications-header">
+        <h3>Notifications</h3>
+        <button class="close-notifications" onclick="toggleNotificationsPanel()">✕</button>
+      </div>
+      <div class="notifications-body" id="notificationsList">
+        <p class="no-notifications">No new notifications</p>
+      </div>
+    </aside>
 
     <main class="main-content">
       <div id="tasks-view" class="view active">
@@ -58,6 +72,14 @@
       <textarea id="taskDescription" placeholder="Full memo/description for this task"></textarea>
       <textarea id="taskNotes" placeholder="Private notes (not part of the memo)"></textarea>
       <textarea id="taskNeeds" placeholder="What I need from you (one per line)"></textarea>
+      <div class="priority-selector">
+        <label for="taskPriority">Priority Level:</label>
+        <select id="taskPriority">
+          <option value="high">🔴 High - Urgent</option>
+          <option value="medium" selected>🟡 Medium - Moderate</option>
+          <option value="low">🟢 Low - Can wait</option>
+        </select>
+      </div>
       <div class="modal-actions">
         <button onclick="addTask()">Add Task</button>
         <button class="secondary" onclick="closeAddTaskModal()">Cancel</button>

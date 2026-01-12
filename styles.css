@@ -26,25 +26,213 @@ body {
   height: 100vh;
 }
 
-/* ---------- Sidebar ---------- */
-.sidebar {
-  width: 240px;
-  background: var(--sidebar-bg);
-  color: var(--sidebar-text);
-  padding: 24px;
+.nav-links a.active {
+  background: var(--sidebar-active);
+  font-weight: 600;
+}
+
+/* ---------- Notifications Trigger ---------- */
+.notifications-trigger {
+  margin-top: auto;
+  padding: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.notifications-trigger:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.notification-icon {
+  font-size: 1.5rem;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+/* ---------- Notifications Panel ---------- */
+.notifications-panel {
+  position: fixed;
+  right: -350px;
+  top: 0;
+  width: 350px;
+  height: 100vh;
+  background: var(--card);
+  box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+  transition: right 0.3s ease;
+  z-index: 2000;
   display: flex;
   flex-direction: column;
 }
 
-.sidebar-header h2 {
-  margin: 0 0 24px 0;
-  font-size: 1.5rem;
+.notifications-panel.open {
+  right: 0;
 }
 
-.nav-links {
-  list-style: none;
-  padding: 0;
+.notifications-header {
+  padding: 20px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notifications-header h3 {
   margin: 0;
+  font-size: 1.2rem;
+}
+
+.close-notifications {
+  background: transparent;
+  border: none;
+  color: var(--sidebar-text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+
+.close-notifications:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.notifications-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.notification-item {
+  background: var(--bg);
+  border-left: 4px solid var(--accent);
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.notification-item:hover {
+  transform: translateX(-4px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.notification-item.unread {
+  background: rgba(37, 99, 235, 0.05);
+  font-weight: 600;
+}
+
+.notification-title {
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.notification-time {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.no-notifications {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px 20px;
+}
+
+/* ---------- Priority Flags ---------- */
+.priority-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.priority-badge.high {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.priority-badge.medium {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.priority-badge.low {
+  background: #dcfce7;
+  color: #14532d;
+  border: 1px solid #bbf7d0;
+}
+
+.priority-selector {
+  margin: 16px 0;
+}
+
+.priority-selector label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.priority-selector select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.priority-selector select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.priority-change-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: 8px;
+}
+
+.priority-change-btn:hover {
+  background: var(--bg);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .nav-links a {

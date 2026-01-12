@@ -23,14 +23,19 @@ window.closeAddTaskModal = closeAddTaskModal;
 window.openUpdateModal = openUpdateModal;
 window.closeUpdateModal = closeUpdateModal;
 window.saveUpdate = saveUpdate;
+window.toggleNotificationsPanel = toggleNotificationsPanel;
+window.changePriority = changePriority;
+window.navigateToTask = navigateToTask;
 
 // -----------------------------
 // Global state
 // -----------------------------
 let tasks = [];
+let notifications = [];
 let taskToCompleteId = null;
 let taskToUpdateId = null;
 const tasksCollection = collection(db, "tasks");
+const notificationsCollection = collection(db, "notifications");
 
 // -----------------------------
 // Navigation
@@ -71,6 +76,7 @@ function closeAddTaskModal() {
   document.getElementById("taskDescription").value = "";
   document.getElementById("taskNotes").value = "";
   document.getElementById("taskNeeds").value = "";
+  document.getElementById("taskPriority").value = "medium";
 }
 
 // -----------------------------
@@ -79,17 +85,29 @@ async function addTask() {
   const description = document.getElementById("taskDescription").value.trim();
   const notes = document.getElementById("taskNotes").value.trim();
   const needsText = document.getElementById("taskNeeds").value.trim();
+  const priority = document.getElementById("taskPriority").value;
   const needs = needsText ? needsText.split('\n').map(n => n.trim()).filter(n => n) : [];
 
-  await addDoc(tasksCollection, {
+  const newTask = await addDoc(tasksCollection, {
     title,
     description,
     notes,
     needs,
+    priority,
     done: false,
     createdAt: new Date(),
     completionNotes: "",
     updates: [],
+  });
+
+  // Create notification for new task
+  await addDoc(notificationsCollection, {
+    type: "new_task",
+    taskId: newTask.id,
+    taskTitle: title,
+    message: `New task created: "${title}"`,
+    read: false,
+    createdAt: new Date(),
   });
 
   closeAddTaskModal();
@@ -174,6 +192,67 @@ async function saveUpdate() {
   closeUpdateModal();
 }
 
+// -----------------------------
+// Priority Change Function
+// -----------------------------
+async function changePriority(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  const currentPriority = task.priority || "medium";
+  
+  const priorities = ["low", "medium", "high"];
+  const priorityNames = { low: "🟢 Low", medium: "🟡 Medium", high: "🔴 High" };
+  
+  const newPriority = prompt(
+    `Current priority: ${priorityNames[currentPriority]}\n\nSelect new priority:\n1 - 🟢 Low\n2 - 🟡 Medium\n3 - 🔴 High\n\nEnter 1, 2, or 3:`,
+    currentPriority === "low" ? "1" : currentPriority === "medium" ? "2" : "3"
+  );
+  
+  let selectedPriority;
+  if (newPriority === "1") selectedPriority = "low";
+  else if (newPriority === "2") selectedPriority = "medium";
+  else if (newPriority === "3") selectedPriority = "high";
+  else return; // Cancelled or invalid input
+  
+  if (selectedPriority === currentPriority) return;
+  
+  const taskDoc = doc(db, "tasks", taskId);
+  await updateDoc(taskDoc, { priority: selectedPriority });
+  
+  // Create notification for priority change
+  await addDoc(notificationsCollection, {
+    type: "priority_change",
+    taskId: taskId,
+    taskTitle: task.title,
+    message: `Task priority changed: "${task.title}" is now ${priorityNames[selectedPriority]}`,
+    oldPriority: currentPriority,
+    newPriority: selectedPriority,
+    read: false,
+    createdAt: new Date(),
+  });
+}
+
+// -----------------------------
+// Notifications Panel
+// -----------------------------
+function toggleNotificationsPanel() {
+  const panel = document.getElementById("notificationsPanel");
+  panel.classList.toggle("open");
+}
+
+async function navigateToTask(taskId, notificationId) {
+  // Mark notification as read
+  if (notificationId) {
+    const notificationDoc = doc(db, "notifications", notificationId);
+    await updateDoc(notificationDoc, { read: true });
+  }
+  
+  // Close notification panel
+  toggleNotificationsPanel();
+  
+  // Navigate to task
+  jumpTo("task", taskId);
+}
+
 function toggleSection(id, section) {
   const el = document.getElementById(`${section}-${id}`);
   const isOpen = el.style.display === "block";
@@ -186,10 +265,23 @@ function toggleSection(id, section) {
 function renderTasks(tasksToRender) {
   const container = document.getElementById("taskList");
   container.innerHTML = "";
-  tasksToRender.forEach((task) => {
+  
+  // Sort tasks by priority (high > medium > low)
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  const sortedTasks = [...tasksToRender].sort((a, b) => {
+    const priorityA = priorityOrder[a.priority || "medium"];
+    const priorityB = priorityOrder[b.priority || "medium"];
+    return priorityA - priorityB;
+  });
+  
+  sortedTasks.forEach((task) => {
     const div = document.createElement("div");
     div.className = `task ${task.done ? "done" : ""}`;
     div.id = `task-${task.id}`;
+
+    const priority = task.priority || "medium";
+    const priorityEmoji = priority === "high" ? "🔴" : priority === "medium" ? "🟡" : "🟢";
+    const priorityLabel = priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low";
 
     const updates = task.updates || [];
     const updateHistoryHTML = updates.length > 0 ? `
@@ -206,12 +298,16 @@ function renderTasks(tasksToRender) {
 
     div.innerHTML = `
       <div class="task-header">
-        <strong>${task.title}</strong>
+        <div>
+          <strong>${task.title}</strong>
+          <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
+        </div>
         <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
       </div>
       <div class="task-actions">
         <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
         ${task.description ? `<button onclick="jumpTo('memo', '${task.id}')">📝 View Memo</button>` : ""}
+        <button class="priority-change-btn" onclick="changePriority('${task.id}')">🚩 Change Priority</button>
       </div>
     `;
     container.appendChild(div);
@@ -332,6 +428,61 @@ function jumpTo(view, id) {
 }
 
 // -----------------------------
+// Render Notifications
+// -----------------------------
+function renderNotifications(notificationsToRender) {
+  const container = document.getElementById("notificationsList");
+  const badge = document.getElementById("notificationBadge");
+  
+  // Sort notifications by timestamp (newest first)
+  const sortedNotifications = [...notificationsToRender].sort((a, b) => {
+    const timeA = a.createdAt.seconds || 0;
+    const timeB = b.createdAt.seconds || 0;
+    return timeB - timeA;
+  });
+  
+  const unreadCount = sortedNotifications.filter(n => !n.read).length;
+  
+  if (unreadCount > 0) {
+    badge.textContent = unreadCount;
+    badge.style.display = "flex";
+  } else {
+    badge.style.display = "none";
+  }
+  
+  if (sortedNotifications.length === 0) {
+    container.innerHTML = '<p class="no-notifications">No new notifications</p>';
+    return;
+  }
+  
+  container.innerHTML = "";
+  sortedNotifications.forEach((notification) => {
+    const div = document.createElement("div");
+    div.className = `notification-item ${!notification.read ? "unread" : ""}`;
+    div.onclick = () => navigateToTask(notification.taskId, notification.id);
+    
+    const timeAgo = getTimeAgo(notification.createdAt);
+    
+    div.innerHTML = `
+      <div class="notification-title">${notification.message}</div>
+      <div class="notification-time">${timeAgo}</div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function getTimeAgo(timestamp) {
+  const now = new Date();
+  const time = new Date(timestamp.seconds * 1000);
+  const diffInSeconds = Math.floor((now - time) / 1000);
+  
+  if (diffInSeconds < 60) return "Just now";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+  return `${Math.floor(diffInSeconds / 86400)} days ago`;
+}
+
+// -----------------------------
 // Fetch and listen for real-time updates
 // -----------------------------
 const q = query(tasksCollection, orderBy("createdAt", "desc"));
@@ -345,5 +496,12 @@ onSnapshot(q, (snapshot) => {
   renderMemos(tasks); // Memos view shows all tasks with descriptions
   renderNeeds(activeTasks);
   renderCompleted(completedTasks);
+});
+
+// Listen for notifications
+const notificationsQuery = query(notificationsCollection, orderBy("createdAt", "desc"));
+onSnapshot(notificationsQuery, (snapshot) => {
+  notifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  renderNotifications(notifications);
 });
 
