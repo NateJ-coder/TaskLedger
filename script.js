@@ -118,6 +118,14 @@ function checkLogin() {
   if (savedUser) {
     currentUser = savedUser;
     document.getElementById("currentUserName").textContent = savedUser;
+    
+    // Request notification permission
+    if (Notification.permission === "default") {
+      Notification.requestPermission().then(permission => {
+        console.log("Notification permission:", permission);
+      });
+    }
+    
     initializeApp();
   } else {
     // Redirect to login page if not logged in
@@ -288,7 +296,8 @@ async function addTask() {
   });
 
   // Determine recipient (the other user)
-  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  // TESTING MODE: Send to self to test notifications
+  const recipient = currentUser; // For testing: currentUser === "Nate" ? "Craig" : "Nate";
 
   // Create notification for new task
   try {
@@ -1724,6 +1733,26 @@ function initializeApp() {
   );
 
   onSnapshot(notificationsQuery, (snapshot) => {
+    // Trigger system notifications for new notifications
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added") {
+        const data = change.doc.data();
+        
+        // Trigger browser notification popup
+        if (Notification.permission === "granted" && !data.read) {
+          new Notification("TaskLedger Update", {
+            body: data.message,
+            icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%232563eb'/%3E%3Ctext x='50' y='50' font-size='40' text-anchor='middle' dominant-baseline='middle' fill='white'%3ETL%3C/text%3E%3C/svg%3E",
+            badge: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%232563eb'/%3E%3C/svg%3E",
+            tag: data.type,
+            requireInteraction: false,
+            silent: false
+          });
+        }
+      }
+    });
+    
+    // Update UI
     const allNotifications = snapshot.docs;
     
     // Separate read and unread
