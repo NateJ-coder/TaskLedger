@@ -448,9 +448,12 @@ async function submitForReview() {
   }
   
   // Update task to in-review status
+  // Set reviewer to the opposite user (if Nate submits, Craig reviews)
+  const reviewer = currentUser === "Nate" ? "Craig" : "Nate";
   await updateDoc(taskDoc, {
     status: 'in-review',
     reviewSubmission: reviewSubmission,
+    reviewer: reviewer,
     done: false // Keep done false so it doesn't show in completed
   });
   
@@ -2315,14 +2318,32 @@ async function verifyTaskComplete(taskId, feedback) {
     console.error('Error deleting task files:', error);
   }
   
-  // Update task to completed status
-  await updateDoc(taskDoc, {
+  // Auto-complete all memos and needs for this task
+  const updateData = {
     status: 'completed',
     done: true,
     reviewedBy: currentUser,
     reviewedAt: new Date(),
     reviewFeedback: feedback || 'Approved'
-  });
+  };
+  
+  // Mark memo as complete if it exists
+  if (task.description && task.description.trim()) {
+    updateData.memoCompleted = true;
+    updateData.memoCompletedAt = new Date();
+  }
+  
+  // Mark all needs as complete
+  if (task.needs && task.needs.length > 0) {
+    updateData.needs = task.needs.map(need => ({
+      ...need,
+      completed: true,
+      completedAt: new Date()
+    }));
+  }
+  
+  // Update task to completed status
+  await updateDoc(taskDoc, updateData);
   
   // Add update to task history
   const updates = task.updates || [];
@@ -2361,13 +2382,16 @@ async function flagForReview(taskId, feedback) {
     return;
   }
   
-  // Move task back to active status with review feedback
+  // Move task to needs-review status with review feedback
+  // Set reviewer to task owner so it appears in their review dashboard
+  const taskOwner = task.createdBy || (currentUser === "Nate" ? "Craig" : "Nate");
   await updateDoc(taskDoc, {
-    status: 'active',
+    status: 'needs-review',
     done: false,
     reviewedBy: currentUser,
     reviewedAt: new Date(),
     reviewFeedback: feedback,
+    reviewer: taskOwner,
     flaggedForChanges: true
   });
   
@@ -2401,7 +2425,11 @@ function renderReview(tasksToRender) {
   const container = document.getElementById("reviewList");
   if (!container) return;
   
-  const reviewTasks = tasksToRender.filter(t => t.status === 'in-review');
+  // Only show tasks where current user is the assigned reviewer
+  // This includes both 'in-review' (awaiting review) and 'needs-review' (flagged for changes)
+  const reviewTasks = tasksToRender.filter(t => 
+    (t.status === 'in-review' || t.status === 'needs-review') && t.reviewer === currentUser
+  );
   
   // Update review badge
   const badge = document.getElementById("reviewBadge");
@@ -2424,6 +2452,22 @@ function renderReview(tasksToRender) {
     const submittedDate = submission.submittedAt?.seconds 
       ? new Date(submission.submittedAt.seconds * 1000).toLocaleString()
       : 'Unknown date';
+    
+    // Check if this task was flagged for review
+    const isFlagged = task.status === 'needs-review';
+    const statusLabel = isFlagged ? 'Needs Changes' : 'Pending Review';
+    const statusClass = isFlagged ? 'needs-changes-status' : 'review-status';
+    
+    let feedbackHTML = '';
+    if (isFlagged && task.reviewFeedback) {
+      feedbackHTML = `
+        <div class="review-feedback-section">
+          <h4>🚩 Reviewer Feedback:</h4>
+          <p class="feedback-text">${task.reviewFeedback}</p>
+          <p class="feedback-meta">From ${task.reviewedBy} on ${task.reviewedAt?.seconds ? new Date(task.reviewedAt.seconds * 1000).toLocaleString() : 'Unknown date'}</p>
+        </div>
+      `;
+    }
     
     let filesHTML = '';
     if (submission.files && submission.files.length > 0) {
@@ -2454,15 +2498,16 @@ function renderReview(tasksToRender) {
     }
     
     return `
-      <div class="review-card">
+      <div class="review-card ${isFlagged ? 'flagged' : ''}">
         <div class="review-header">
           <h3>${task.title}</h3>
-          <span class="review-status">Pending Review</span>
+          <span class="${statusClass}">${statusLabel}</span>
         </div>
         <div class="review-meta">
           <span>Submitted by ${submission.submittedBy || 'Unknown'}</span>
           <span>${submittedDate}</span>
         </div>
+        ${feedbackHTML}
         <div class="review-notes">
           <h4>📝 Completion Summary:</h4>
           <p>${submission.notes || 'No notes provided'}</p>

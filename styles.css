@@ -1913,6 +1913,48 @@ h1 {
   font-weight: 600;
 }
 
+.needs-changes-status {
+  background: #f59e0b;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.review-card.flagged {
+  border-left: 4px solid #f59e0b;
+}
+
+.review-feedback-section {
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+.review-feedback-section h4 {
+  margin: 0 0 8px 0;
+  color: #92400e;
+  font-size: 0.95rem;
+}
+
+.feedback-text {
+  margin: 0 0 8px 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.feedback-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #b45309;
+  font-style: italic;
+}
+
 .review-meta {
   display: flex;
   gap: 20px;
