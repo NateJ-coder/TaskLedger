@@ -340,6 +340,12 @@
     <div class="modal-content">
       <h2>Send Message</h2>
       <p id="messageRecipient"></p>
+      <label for="messagePriority" style="display: block; margin-bottom: 6px; font-weight: 600;">Priority:</label>
+      <select id="messagePriority" style="width: 100%; padding: 8px; margin-bottom: 12px; border-radius: 4px; border: 1px solid var(--border);">
+        <option value="low">Low</option>
+        <option value="normal" selected>Normal</option>
+        <option value="high">High (Pop-up notification)</option>
+      </select>
       <textarea id="messageText" placeholder="Type your message here..." rows="6"></textarea>
       <div class="modal-actions">
         <button onclick="sendMessage()">Send Message</button>
@@ -350,6 +356,18 @@
 
   <div id="sentConfirmation" class="sent-confirmation">
     Message sent! ✓
+  </div>
+
+  <!-- High Priority Message Popup -->
+  <div id="highPriorityPopup" class="modal-overlay" style="z-index: 10000;">
+    <div class="modal-content" style="max-width: 500px; border: 3px solid #ff4444;">
+      <h2 style="color: #ff4444; margin-bottom: 8px;">🔔 High Priority Message</h2>
+      <p id="highPriorityFrom" style="color: var(--muted); font-size: 0.9em; margin-bottom: 12px;"></p>
+      <div id="highPriorityText" style="padding: 16px; background: var(--bg); border-radius: 6px; margin-bottom: 16px; white-space: pre-wrap;"></div>
+      <div class="modal-actions">
+        <button onclick="closeHighPriorityPopup()">Got it</button>
+      </div>
+    </div>
   </div>
 
   <div id="needCompletionModal" class="modal-overlay">

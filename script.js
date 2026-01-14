@@ -55,6 +55,7 @@ window.closeNotificationDetail = closeNotificationDetail;
 window.openMessageModal = openMessageModal;
 window.closeMessageModal = closeMessageModal;
 window.sendMessage = sendMessage;
+window.closeHighPriorityPopup = closeHighPriorityPopup;
 window.clearAllNotifications = clearAllNotifications;
 window.toggleMemoComplete = toggleMemoComplete;
 window.toggleNeedComplete = toggleNeedComplete;
@@ -1090,10 +1091,57 @@ function openMessageModal() {
 function closeMessageModal() {
   document.getElementById("messageModal").style.display = "none";
   document.getElementById("messageText").value = "";
+  // Reset priority to normal
+  document.getElementById("messagePriority").value = "normal";
+}
+
+// Check for high-priority unshown messages
+async function checkHighPriorityMessages() {
+  try {
+    const shownMessages = JSON.parse(localStorage.getItem('shownHighPriorityMessages') || '[]');
+    
+    const q = query(
+      notificationsCollection,
+      where("recipient", "==", currentUser),
+      where("priority", "==", "high"),
+      where("type", "==", "message"),
+      where("read", "==", false)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    // Find first unshown high-priority message
+    for (const doc of snapshot.docs) {
+      if (!shownMessages.includes(doc.id)) {
+        const notification = doc.data();
+        showHighPriorityPopup(doc.id, notification);
+        break; // Only show one at a time
+      }
+    }
+  } catch (error) {
+    console.error("Error checking high-priority messages:", error);
+  }
+}
+
+function showHighPriorityPopup(notificationId, notification) {
+  document.getElementById("highPriorityFrom").textContent = `From: ${notification.sender} • ${new Date(notification.createdAt.toDate()).toLocaleString()}`;
+  document.getElementById("highPriorityText").textContent = notification.fullMessage || notification.message;
+  document.getElementById("highPriorityPopup").style.display = "flex";
+  
+  // Mark as shown in localStorage
+  const shownMessages = JSON.parse(localStorage.getItem('shownHighPriorityMessages') || '[]');
+  shownMessages.push(notificationId);
+  localStorage.setItem('shownHighPriorityMessages', JSON.stringify(shownMessages));
+}
+
+function closeHighPriorityPopup() {
+  document.getElementById("highPriorityPopup").style.display = "none";
 }
 
 async function sendMessage() {
   const messageText = document.getElementById("messageText").value.trim();
+  const priority = document.getElementById("messagePriority").value;
+  
   if (!messageText) {
     alert("Please enter a message");
     return;
@@ -1108,6 +1156,7 @@ async function sendMessage() {
       sender: currentUser,
       recipient: recipient,
       message: messageText,
+      priority: priority,
       createdAt: new Date(),
       read: false,
     });
@@ -1118,6 +1167,7 @@ async function sendMessage() {
       messageId: messageDoc.id,
       message: `New message from ${currentUser}: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}`,
       fullMessage: messageText,
+      priority: priority,
       createdAt: new Date(),
       read: false,
       recipient: recipient,
@@ -2196,6 +2246,10 @@ function initializeApp() {
 
     // Render with unread first, then read
     renderNotifications([...unreadDocs, ...readDocs]);
+    
+    // Check for high-priority messages on first load
+    checkHighPriorityMessages();
+    
     hideLoading();
   }, (error) => {
     console.log("Error fetching notifications:", error);
