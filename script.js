@@ -1,4 +1,5 @@
 import { db, storage } from "./firebase-config.js";
+import { config } from "./config.js";
 import {
   collection,
   addDoc,
@@ -71,6 +72,12 @@ window.flagForReview = flagForReview;
 window.openReviewFeedbackModal = openReviewFeedbackModal;
 window.closeReviewFeedbackModal = closeReviewFeedbackModal;
 window.submitReviewAction = submitReviewAction;
+window.openFulfillNeedModal = openFulfillNeedModal;
+window.closeFulfillNeedModal = closeFulfillNeedModal;
+window.saveFulfillNeed = saveFulfillNeed;
+window.toggleChatBot = toggleChatBot;
+window.sendChatMessage = sendChatMessage;
+window.handleChatKeydown = handleChatKeydown;
 
 // -----------------------------
 // Loading Indicator Functions
@@ -115,9 +122,15 @@ let taskToEditNeedsId = null;
 let taskToAddAttachmentId = null;
 let needToCompleteTaskId = null;
 let needToCompleteIndex = null;
+let needToFulfillTaskId = null;
+let needToFulfillIndex = null;
+let chatHistory = [];
+let knowledgeBase = [];
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
 const messagesCollection = collection(db, "messages");
+const chatCollection = collection(db, "chatHistory");
+const knowledgeCollection = collection(db, "knowledgeBase");
 
 // -----------------------------
 // Login/Logout Functions
@@ -1473,6 +1486,84 @@ async function saveNeedCompletion() {
   hideLoading();
 }
 
+// Open fulfill need modal
+function openFulfillNeedModal(taskId, needIndex) {
+  const task = tasks.find(t => t.id === taskId);
+  const needs = task.needs || [];
+  const need = needs[needIndex];
+  const needText = typeof need === 'string' ? need : need.text;
+  
+  needToFulfillTaskId = taskId;
+  needToFulfillIndex = needIndex;
+  
+  document.getElementById("fulfillNeedTaskTitle").textContent = `Fulfilling need from: ${task.title}`;
+  document.getElementById("fulfillNeedText").textContent = needText;
+  document.getElementById("fulfillNeedNote").value = "";
+  document.getElementById("fulfillContactDetails").value = "";
+  document.getElementById("fulfillNeedLink").value = "";
+  document.getElementById("fulfillNeedModal").style.display = "flex";
+}
+
+// Close fulfill need modal
+function closeFulfillNeedModal() {
+  document.getElementById("fulfillNeedModal").style.display = "none";
+  document.getElementById("fulfillNeedNote").value = "";
+  document.getElementById("fulfillContactDetails").value = "";
+  document.getElementById("fulfillNeedLink").value = "";
+  needToFulfillTaskId = null;
+  needToFulfillIndex = null;
+}
+
+// Save need fulfillment
+async function saveFulfillNeed() {
+  if (!needToFulfillTaskId || needToFulfillIndex === null) return;
+  
+  showLoading('Fulfilling need...');
+  const task = tasks.find(t => t.id === needToFulfillTaskId);
+  const note = document.getElementById("fulfillNeedNote").value.trim();
+  const contactDetails = document.getElementById("fulfillContactDetails").value.trim();
+  const link = document.getElementById("fulfillNeedLink").value.trim();
+  
+  const needs = [...(task.needs || [])];
+  if (typeof needs[needToFulfillIndex] === 'string') {
+    needs[needToFulfillIndex] = { text: needs[needToFulfillIndex], priority: 'medium' };
+  }
+  
+  needs[needToFulfillIndex].fulfilled = true;
+  needs[needToFulfillIndex].fulfillmentNote = note;
+  needs[needToFulfillIndex].fulfillmentContactDetails = contactDetails;
+  needs[needToFulfillIndex].fulfillmentLink = link;
+  needs[needToFulfillIndex].fulfilledAt = new Date();
+  needs[needToFulfillIndex].fulfilledBy = currentUser;
+  
+  const taskDoc = doc(db, "tasks", needToFulfillTaskId);
+  await updateDoc(taskDoc, { needs });
+  
+  // Send notification
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  let notificationMessage = `${currentUser} fulfilled need in "${task.title}": ${needs[needToFulfillIndex].text}`;
+  if (note) {
+    notificationMessage += ` - ${note.substring(0, 50)}${note.length > 50 ? '...' : ''}`;
+  }
+  
+  try {
+    await addDoc(notificationsCollection, {
+      type: "need_fulfilled",
+      taskId: needToFulfillTaskId,
+      message: notificationMessage,
+      createdAt: new Date(),
+      read: false,
+      recipient: recipient,
+      sender: currentUser,
+    });
+  } catch (error) {
+    console.error("Error creating notification:", error);
+  }
+  
+  closeFulfillNeedModal();
+  hideLoading();
+}
+
 function renderMemos(tasksToRender) {
   const container = document.getElementById("memoList");
   container.innerHTML = "";
@@ -1545,8 +1636,8 @@ function renderNeeds(tasksToRender) {
       needs.forEach((need, index) => {
         // Handle old format (string) and new format (object)
         const needObj = typeof need === 'string' ? { text: need, priority: 'medium' } : need;
-        // Only show non-completed needs
-        if (!needObj.completed) {
+        // Only show non-completed and non-fulfilled needs
+        if (!needObj.completed && !needObj.fulfilled) {
           allNeeds.push({
             ...needObj,
             taskId: task.id,
@@ -1600,7 +1691,10 @@ function renderNeeds(tasksToRender) {
         <div class="need-text ${isCompleted ? 'crossed-off' : ''}">${need.text}</div>
       </div>
       ${needMediaHtml}
-      <button class="priority-change-btn" onclick="changeNeedPriority('${need.taskId}', ${need.needIndex})">🚩 Change Need Priority</button>
+      <div class="need-actions">
+        <button class="fulfill-need-btn" onclick="openFulfillNeedModal('${need.taskId}', ${need.needIndex})">✅ Fulfill Need</button>
+        <button class="priority-change-btn" onclick="changeNeedPriority('${need.taskId}', ${need.needIndex})">🚩 Change Priority</button>
+      </div>
     `;
     container.appendChild(div);
   });
@@ -1657,6 +1751,7 @@ function renderCompletedBin() {
   // Render completed needs
   const needsContainer = document.getElementById("completedNeedsList");
   const completedNeeds = [];
+  const fulfilledNeeds = [];
   
   tasks.forEach(task => {
     const needs = task.needs || [];
@@ -1664,6 +1759,14 @@ function renderCompletedBin() {
       const needObj = typeof need === 'string' ? { text: need } : need;
       if (needObj.completed) {
         completedNeeds.push({
+          ...needObj,
+          taskId: task.id,
+          taskTitle: task.title,
+          needIndex: index
+        });
+      }
+      if (needObj.fulfilled) {
+        fulfilledNeeds.push({
           ...needObj,
           taskId: task.id,
           taskTitle: task.title,
@@ -1712,8 +1815,52 @@ function renderCompletedBin() {
     }).join("");
   }
   
+  // Render fulfilled needs
+  const fulfilledContainer = document.getElementById("fulfilledNeedsList");
+  
+  if (fulfilledNeeds.length === 0) {
+    fulfilledContainer.innerHTML = "<p class='no-items'>No fulfilled needs</p>";
+  } else {
+    fulfilledContainer.innerHTML = fulfilledNeeds.map(need => {
+      let detailsHTML = '';
+      if (need.fulfillmentNote) {
+        detailsHTML += `<div class="completion-detail"><strong>Note:</strong> ${need.fulfillmentNote}</div>`;
+      }
+      if (need.fulfillmentContactDetails) {
+        detailsHTML += `<div class="completion-detail"><strong>Contact Details:</strong> ${need.fulfillmentContactDetails}</div>`;
+      }
+      if (need.fulfillmentLink) {
+        detailsHTML += `<div class="completion-detail"><strong>Link:</strong> <a href="${need.fulfillmentLink}" target="_blank" rel="noopener">${need.fulfillmentLink}</a></div>`;
+      }
+      
+      // Add media from the need itself
+      if (need.needsLinks && need.needsLinks.length > 0) {
+        detailsHTML += '<div class="bin-media-links" style="margin-top: 8px;">';
+        need.needsLinks.forEach(link => {
+          detailsHTML += `<div><a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-size: 0.85rem;">🔗 ${link.text}</a></div>`;
+        });
+        detailsHTML += '</div>';
+      }
+      
+      if (need.fulfilledAt) {
+        const fulfilledDate = need.fulfilledAt.seconds ? new Date(need.fulfilledAt.seconds * 1000) : new Date(need.fulfilledAt);
+        detailsHTML += `<div class="completion-detail" style="font-size: 0.75rem; color: var(--muted);">Fulfilled ${fulfilledDate.toLocaleDateString()} by ${need.fulfilledBy}</div>`;
+      }
+      
+      return `
+        <div class="bin-item">
+          <div class="bin-item-header">
+            <span>${need.text}</span>
+          </div>
+          <div class="bin-item-task">From: ${need.taskTitle}</div>
+          ${detailsHTML}
+        </div>
+      `;
+    }).join("");
+  }
+  
   // Update badge count
-  const totalCompleted = completedMemos.length + completedNeeds.length;
+  const totalCompleted = completedMemos.length + completedNeeds.length + fulfilledNeeds.length;
   const badge = document.getElementById("completedBinBadge");
   if (totalCompleted > 0) {
     badge.textContent = totalCompleted;
@@ -1998,6 +2145,9 @@ function initializeApp() {
 
   // Initialize permanent files listener
   initPermanentFilesListener();
+  
+  // Initialize chatbot
+  initializeChatBot();
 
   // Listen for all notifications for current user
   showLoading('Loading notifications...');
@@ -2770,3 +2920,421 @@ async function deletePermanentFile(fileId) {
   }
 }
 
+// -----------------------------
+// AI Chatbot Functions
+// -----------------------------
+
+// Get Gemini API Key from config
+const GEMINI_API_KEY = config.GEMINI_API_KEY || localStorage.getItem('GEMINI_API_KEY');
+
+// Toggle chat modal
+function toggleChatBot() {
+  const modal = document.getElementById('chatBotModal');
+  const isOpen = modal.classList.contains('open');
+  
+  if (isOpen) {
+    modal.classList.remove('open');
+  } else {
+    modal.classList.add('open');
+    // Load chat history when opening
+    loadChatHistory();
+  }
+}
+
+// Handle Enter key in chat input
+function handleChatKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendChatMessage();
+  }
+}
+
+// Gather context about current workspace state
+function gatherContext() {
+  const activeTasks = tasks.filter(t => !t.done);
+  const activeNeeds = [];
+  const activeMemos = [];
+  
+  tasks.forEach(task => {
+    if (task.description && !task.memoCompleted) {
+      activeMemos.push({
+        task: task.title,
+        memo: task.description
+      });
+    }
+    
+    const needs = task.needs || [];
+    needs.forEach(need => {
+      const needObj = typeof need === 'string' ? { text: need } : need;
+      if (!needObj.completed && !needObj.fulfilled) {
+        activeNeeds.push({
+          task: task.title,
+          need: needObj.text
+        });
+      }
+    });
+  });
+  
+  return {
+    currentUser,
+    totalTasks: tasks.length,
+    activeTasks: activeTasks.length,
+    completedTasks: tasks.filter(t => t.done).length,
+    activeNeeds: activeNeeds.length,
+    activeMemos: activeMemos.length,
+    recentTasks: activeTasks.slice(0, 5).map(t => ({
+      title: t.title,
+      priority: t.priority,
+      createdBy: t.createdBy
+    })),
+    recentNeeds: activeNeeds.slice(0, 5),
+    knowledgeBaseEntries: knowledgeBase.length
+  };
+}
+
+// Build system prompt with context
+function buildSystemPrompt() {
+  const context = gatherContext();
+  
+  return `You are an AI assistant for TaskLedger, a collaborative task management app used by Craig and Nate.
+
+CURRENT CONTEXT:
+- Current user: ${context.currentUser}
+- Active tasks: ${context.activeTasks}
+- Active needs: ${context.activeNeeds}
+- Active memos: ${context.activeMemos}
+
+TASKLEDGER FEATURES:
+1. Tasks: Create tasks, set priorities (high/medium/low), mark as done, submit for review
+2. Memos: Add detailed notes/descriptions to tasks with links and files
+3. Needs: Track required items, contacts, or resources for tasks - can be completed or fulfilled
+4. Review System: Tasks can be submitted for review by the other user
+5. Updates Feed: Share progress updates with notes, links, and files
+6. Resources: Permanent file and link storage for important documents
+7. Completed Bin: Archive for completed memos and needs
+
+HOW TO FULFILL NEEDS:
+- Click the "✅ Fulfill Need" button on any need card
+- Provide fulfillment information: notes, contact details, links
+- Fulfilled needs move to the "Fulfilled Needs" section in Completed Items
+
+KNOWLEDGE BASE:
+You have access to a knowledge base with ${context.knowledgeBaseEntries} entries containing critical information like login credentials, platform details, and important contacts.
+
+When answering questions:
+1. Be concise and helpful
+2. If asked about login details or credentials, search the knowledge base
+3. Provide step-by-step instructions for TaskLedger features
+4. Reference the current context when relevant
+5. If you don't have specific information, be honest about it`;
+}
+
+// Send message to Gemini API
+async function callGeminiAPI(userMessage) {
+  if (!GEMINI_API_KEY) {
+    return "⚠️ Gemini API key not found. Please add GEMINI_API_KEY to your environment variables or localStorage.";
+  }
+  
+  try {
+    const systemPrompt = buildSystemPrompt();
+    
+    // Search knowledge base for relevant information
+    const relevantKnowledge = await searchKnowledgeBase(userMessage);
+    let knowledgeContext = '';
+    if (relevantKnowledge.length > 0) {
+      knowledgeContext = '\n\nRELEVANT KNOWLEDGE BASE ENTRIES:\n' + 
+        relevantKnowledge.map(k => `- ${k.title}: ${k.content}`).join('\n');
+    }
+    
+    // Build conversation history for context
+    const recentHistory = chatHistory.slice(-10).map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    }));
+    
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            ...recentHistory,
+            {
+              role: 'user',
+              parts: [{ text: systemPrompt + knowledgeContext + '\n\nUser question: ' + userMessage }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024,
+          }
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+  } catch (error) {
+    console.error('Error calling Gemini API:', error);
+    return `Sorry, I encountered an error: ${error.message}. Please try again.`;
+  }
+}
+
+// Search knowledge base
+async function searchKnowledgeBase(query) {
+  const queryLower = query.toLowerCase();
+  return knowledgeBase.filter(item => {
+    const titleMatch = item.title?.toLowerCase().includes(queryLower);
+    const contentMatch = item.content?.toLowerCase().includes(queryLower);
+    const tagsMatch = item.tags?.some(tag => queryLower.includes(tag.toLowerCase()));
+    return titleMatch || contentMatch || tagsMatch;
+  }).slice(0, 3); // Return top 3 matches
+}
+
+// Add message to chat UI
+function addMessageToUI(content, role) {
+  const messagesContainer = document.getElementById('chatBotMessages');
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `chat-message ${role}`;
+  
+  const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  
+  messageDiv.innerHTML = `
+    <div class="message-bubble">${content}</div>
+    <div class="message-timestamp">${timestamp}</div>
+  `;
+  
+  messagesContainer.appendChild(messageDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// Show typing indicator
+function showTypingIndicator() {
+  const messagesContainer = document.getElementById('chatBotMessages');
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'chat-message assistant';
+  typingDiv.id = 'typingIndicator';
+  typingDiv.innerHTML = `
+    <div class="message-bubble typing-indicator">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  `;
+  messagesContainer.appendChild(typingDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  const indicator = document.getElementById('typingIndicator');
+  if (indicator) indicator.remove();
+}
+
+// Send chat message
+async function sendChatMessage() {
+  const input = document.getElementById('chatBotInput');
+  const sendBtn = document.getElementById('chatSendBtn');
+  const userMessage = input.value.trim();
+  
+  if (!userMessage) return;
+  
+  // Disable input
+  input.disabled = true;
+  sendBtn.disabled = true;
+  
+  // Add user message to UI
+  addMessageToUI(userMessage, 'user');
+  input.value = '';
+  
+  // Add to chat history
+  chatHistory.push({
+    role: 'user',
+    content: userMessage,
+    timestamp: new Date()
+  });
+  
+  // Show typing indicator
+  showTypingIndicator();
+  
+  // Get AI response
+  const aiResponse = await callGeminiAPI(userMessage);
+  
+  // Remove typing indicator
+  removeTypingIndicator();
+  
+  // Add AI response to UI
+  addMessageToUI(aiResponse, 'assistant');
+  
+  // Add to chat history
+  chatHistory.push({
+    role: 'assistant',
+    content: aiResponse,
+    timestamp: new Date()
+  });
+  
+  // Save to Firestore
+  await saveChatMessage(userMessage, aiResponse);
+  
+  // Re-enable input
+  input.disabled = false;
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+// Save chat message to Firestore
+async function saveChatMessage(userMessage, aiResponse) {
+  try {
+    await addDoc(chatCollection, {
+      user: currentUser,
+      userMessage,
+      aiResponse,
+      timestamp: new Date(),
+      context: gatherContext()
+    });
+  } catch (error) {
+    console.error('Error saving chat message:', error);
+  }
+}
+
+// Load chat history from Firestore
+async function loadChatHistory() {
+  try {
+    const q = query(
+      chatCollection,
+      where('user', '==', currentUser),
+      orderBy('timestamp', 'desc'),
+      // limit to last 20 messages
+    );
+    
+    const snapshot = await getDocs(q);
+    chatHistory = [];
+    
+    // Clear UI except welcome message
+    const messagesContainer = document.getElementById('chatBotMessages');
+    const welcomeMessage = messagesContainer.querySelector('.chat-message.assistant');
+    messagesContainer.innerHTML = '';
+    if (welcomeMessage) {
+      messagesContainer.appendChild(welcomeMessage);
+    }
+    
+    // Load recent messages (reverse order to show oldest first)
+    snapshot.docs.reverse().slice(-10).forEach(doc => {
+      const data = doc.data();
+      chatHistory.push(
+        { role: 'user', content: data.userMessage, timestamp: data.timestamp },
+        { role: 'assistant', content: data.aiResponse, timestamp: data.timestamp }
+      );
+    });
+  } catch (error) {
+    console.error('Error loading chat history:', error);
+  }
+}
+
+// Load knowledge base
+async function loadKnowledgeBase() {
+  try {
+    const snapshot = await getDocs(knowledgeCollection);
+    knowledgeBase = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    console.log(`Loaded ${knowledgeBase.length} knowledge base entries`);
+  } catch (error) {
+    console.error('Error loading knowledge base:', error);
+  }
+}
+
+// Extract and save critical information when app closes
+async function extractAndSaveKnowledge() {
+  showLoading('Processing information...');
+  
+  try {
+    const criticalInfo = [];
+    
+    // Extract login/credential information from tasks, memos, and updates
+    tasks.forEach(task => {
+      // Check description for keywords
+      const keywords = ['login', 'password', 'credential', 'username', 'email', 'phone', 'contact'];
+      const description = task.description?.toLowerCase() || '';
+      const title = task.title?.toLowerCase() || '';
+      
+      if (keywords.some(keyword => description.includes(keyword) || title.includes(keyword))) {
+        criticalInfo.push({
+          type: 'credential',
+          source: 'task',
+          title: task.title,
+          content: task.description || task.title,
+          taskId: task.id,
+          createdBy: task.createdBy,
+          tags: keywords.filter(k => description.includes(k) || title.includes(k))
+        });
+      }
+      
+      // Check updates for critical info
+      if (task.updates) {
+        task.updates.forEach(update => {
+          const updateText = update.text?.toLowerCase() || '';
+          if (keywords.some(keyword => updateText.includes(keyword))) {
+            criticalInfo.push({
+              type: 'update',
+              source: 'task-update',
+              title: `Update: ${task.title}`,
+              content: update.text,
+              taskId: task.id,
+              createdBy: update.author,
+              tags: keywords.filter(k => updateText.includes(k))
+            });
+          }
+        });
+      }
+    });
+    
+    // Save to knowledge base (avoid duplicates)
+    for (const info of criticalInfo) {
+      // Check if similar entry exists
+      const exists = knowledgeBase.some(kb => 
+        kb.title === info.title && kb.content === info.content
+      );
+      
+      if (!exists) {
+        await addDoc(knowledgeCollection, {
+          ...info,
+          extractedAt: new Date(),
+          extractedBy: currentUser
+        });
+      }
+    }
+    
+    console.log(`Extracted ${criticalInfo.length} knowledge entries`);
+  } catch (error) {
+    console.error('Error extracting knowledge:', error);
+  } finally {
+    hideLoading();
+  }
+}
+
+// Set up beforeunload handler
+window.addEventListener('beforeunload', (event) => {
+  // Fire and forget - don't block closing
+  extractAndSaveKnowledge();
+});
+
+// Initialize chatbot
+async function initializeChatBot() {
+  await loadKnowledgeBase();
+  
+  // Check for API key in localStorage if not in env
+  if (!GEMINI_API_KEY) {
+    console.warn('Gemini API key not found. Set VITE_GEMINI_API_KEY or add to localStorage as GEMINI_API_KEY');
+  }
+}
+
+// Call initialization after app loads
+if (currentUser) {
+  initializeChatBot();
+}

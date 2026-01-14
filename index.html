@@ -99,6 +99,10 @@
           <h4>Completed Needs</h4>
           <div id="completedNeedsList" class="completed-items-list"></div>
         </div>
+        <div class="bin-section">
+          <h4>✅ Fulfilled Needs</h4>
+          <div id="fulfilledNeedsList" class="completed-items-list"></div>
+        </div>
       </div>
     </aside>
 
@@ -364,6 +368,24 @@
     </div>
   </div>
 
+  <div id="fulfillNeedModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>✅ Fulfill Need</h2>
+      <p id="fulfillNeedTaskTitle" style="color: var(--muted); margin-bottom: 8px;"></p>
+      <div class="need-completion-text" id="fulfillNeedText" style="padding: 12px; background: var(--bg); border-radius: 6px; margin-bottom: 16px;"></div>
+      <label for="fulfillNeedNote" style="display: block; margin-bottom: 6px; font-weight: 600;">Fulfillment Notes:</label>
+      <textarea id="fulfillNeedNote" placeholder="Describe how you've fulfilled this need..." rows="3"></textarea>
+      <label for="fulfillContactDetails" style="display: block; margin-bottom: 6px; margin-top: 12px; font-weight: 600;">Contact Details / Client Info:</label>
+      <textarea id="fulfillContactDetails" placeholder="Email, phone, client name, or other relevant contact information..." rows="2"></textarea>
+      <label for="fulfillNeedLink" style="display: block; margin-bottom: 6px; margin-top: 12px; font-weight: 600;">Related Link (optional):</label>
+      <input id="fulfillNeedLink" placeholder="https://..." type="url" />
+      <div class="modal-actions">
+        <button onclick="saveFulfillNeed()">Submit Fulfillment</button>
+        <button class="secondary" onclick="closeFulfillNeedModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="attachmentModal" class="modal-overlay">
     <div class="modal-content">
       <h2>Add Link/Attachment</h2>
@@ -408,6 +430,37 @@
       <div class="modal-actions">
         <button onclick="uploadPermanentFile()">Save Resource</button>
         <button class="secondary" onclick="closeFileUploadModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Chat Button -->
+  <button class="chat-bot-button" id="chatBotButton" onclick="toggleChatBot()" title="Ask AI Assistant">
+    <span class="chat-icon">🤖</span>
+  </button>
+
+  <!-- AI Chat Modal -->
+  <div id="chatBotModal" class="chat-bot-modal">
+    <div class="chat-bot-container">
+      <div class="chat-bot-header">
+        <div class="chat-bot-title">
+          <span class="chat-bot-icon">🤖</span>
+          <span>AI Assistant</span>
+        </div>
+        <button class="chat-close-btn" onclick="toggleChatBot()">✕</button>
+      </div>
+      <div class="chat-bot-messages" id="chatBotMessages">
+        <div class="chat-message assistant">
+          <div class="message-bubble">
+            👋 Hi! I'm your AI assistant. I can help you with questions about TaskLedger, retrieve information, or assist with anything else. Just ask!
+          </div>
+        </div>
+      </div>
+      <div class="chat-bot-input-area">
+        <textarea id="chatBotInput" placeholder="Ask me anything..." rows="2" onkeydown="handleChatKeydown(event)"></textarea>
+        <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn">
+          <span>Send</span>
+        </button>
       </div>
     </div>
   </div>

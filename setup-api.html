@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskLedger - Set API Key</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 100%;
+    }
+    h1 {
+      color: #1f2933;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #6b7280;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    label {
+      display: block;
+      color: #1f2933;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      font-family: monospace;
+    }
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    .info {
+      background: #f3f4f6;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #4b5563;
+    }
+    .info a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .info a:hover {
+      text-decoration: underline;
+    }
+    .success {
+      background: #10b981;
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      display: none;
+      text-align: center;
+      font-weight: 600;
+    }
+    .current-key {
+      background: #fef3c7;
+      border: 2px solid #fbbf24;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .current-key strong {
+      display: block;
+      margin-bottom: 5px;
+      color: #92400e;
+    }
+    .current-key code {
+      display: block;
+      background: white;
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 8px;
+      word-break: break-all;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🤖 Set API Key</h1>
+    <p class="subtitle">Configure your Gemini API key for the TaskLedger chatbot</p>
+    
+    <div class="info">
+      <strong>📝 Don't have an API key?</strong><br>
+      Get one free from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>
+    </div>
+    
+    <div id="currentKeyDisplay" style="display: none;" class="current-key">
+      <strong>✅ Current API Key:</strong>
+      API key is already set!
+      <code id="maskedKey"></code>
+      <small style="display: block; margin-top: 8px; color: #92400e;">Enter a new key below to replace it</small>
+    </div>
+    
+    <label for="apiKey">Gemini API Key</label>
+    <input 
+      type="text" 
+      id="apiKey" 
+      placeholder="AIzaSy..." 
+      autocomplete="off"
+    />
+    
+    <button onclick="saveApiKey()">💾 Save API Key</button>
+    
+    <div class="success" id="successMessage">
+      ✅ API key saved successfully!<br>
+      <small style="opacity: 0.9; display: block; margin-top: 8px;">
+        Redirecting to TaskLedger...
+      </small>
+    </div>
+  </div>
+
+  <script>
+    // Check if key already exists
+    window.addEventListener('DOMContentLoaded', () => {
+      const existingKey = localStorage.getItem('GEMINI_API_KEY');
+      if (existingKey) {
+        document.getElementById('currentKeyDisplay').style.display = 'block';
+        const masked = existingKey.substring(0, 8) + '...' + existingKey.substring(existingKey.length - 4);
+        document.getElementById('maskedKey').textContent = masked;
+      }
+    });
+
+    function saveApiKey() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      
+      if (!apiKey) {
+        alert('Please enter an API key');
+        return;
+      }
+      
+      if (!apiKey.startsWith('AIzaSy')) {
+        if (!confirm('This doesn\'t look like a valid Gemini API key (should start with "AIzaSy"). Save anyway?')) {
+          return;
+        }
+      }
+      
+      // Save to localStorage
+      localStorage.setItem('GEMINI_API_KEY', apiKey);
+      
+      // Show success message
+      document.getElementById('successMessage').style.display = 'block';
+      
+      // Redirect after 2 seconds
+      setTimeout(() => {
+        window.location.href = 'index.html';
+      }, 2000);
+    }
+    
+    // Allow Enter key to save
+    document.getElementById('apiKey').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        saveApiKey();
+      }
+    });
+  </script>
+</body>
+</html>
