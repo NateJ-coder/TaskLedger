@@ -3,12 +3,8 @@
 // Get your API key from: https://makersuite.google.com/app/apikey
 
 export const config = {
-  // Option 1: Add your API key directly here (NOT recommended for production)
-  // GEMINI_API_KEY: 'your_api_key_here',
-  
-  // Option 2: Will try to read from localStorage (recommended for client-side)
-  // Run in console: localStorage.setItem('GEMINI_API_KEY', 'your_key_here')
-  GEMINI_API_KEY: localStorage.getItem('GEMINI_API_KEY') || '',
+  // API key for Gemini chatbot
+  GEMINI_API_KEY: 'AIzaSyDwxP9c6LFGUxApU6OD7f6OJyBA1VvIAQk',
 };
 
 // Note: .env files only work with build tools (Vite, Webpack, etc.)
