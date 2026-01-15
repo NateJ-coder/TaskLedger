@@ -51,6 +51,11 @@
           <span class="nav-icon">🎉</span>
           <span class="nav-text">Completed</span>
         </a></li>
+        <li><a href="#" class="nav-link" data-view="completed-work">
+          <span class="nav-icon">✨</span>
+          <span class="nav-text">Completed Work</span>
+          <span class="completed-work-badge" id="completedWorkBadge" style="display: none;">0</span>
+        </a></li>
       </ul>
       <div class="sidebar-footer">
         <button class="message-btn" onclick="openMessageModal()">
@@ -146,6 +151,17 @@
         </div>
         <p class="view-description">Permanent storage for files, links, and references. These are never auto-deleted.</p>
         <section id="filesList"></section>
+      </div>
+
+      <div id="completed-work-view" class="view">
+        <h1>✨ Completed Work</h1>
+        <p class="view-description">Track all completed needs with detailed information about how they were fulfilled</p>
+        <div class="completed-work-filters">
+          <button class="filter-btn active" onclick="filterCompletedWork('all')">All</button>
+          <button class="filter-btn" onclick="filterCompletedWork('completed')">✓ Completed</button>
+          <button class="filter-btn" onclick="filterCompletedWork('fulfilled')">✅ Fulfilled</button>
+        </div>
+        <section id="completedWorkList"></section>
       </div>
     </main>
   </div>

@@ -79,6 +79,7 @@ window.saveFulfillNeed = saveFulfillNeed;
 window.toggleChatBot = toggleChatBot;
 window.sendChatMessage = sendChatMessage;
 window.handleChatKeydown = handleChatKeydown;
+window.filterCompletedWork = filterCompletedWork;
 
 // -----------------------------
 // Loading Indicator Functions
@@ -188,6 +189,11 @@ document.addEventListener("DOMContentLoaded", () => {
           view.classList.remove("active");
         }
       });
+      
+      // Render completed work view when activated
+      if (viewName === "completed-work") {
+        renderCompletedWork();
+      }
     }, { passive: false });
   });
   
@@ -1920,6 +1926,209 @@ function renderCompletedBin() {
   }
 }
 
+// Global filter state for completed work view
+let currentCompletedWorkFilter = 'all';
+
+// Filter completed work
+function filterCompletedWork(filter) {
+  currentCompletedWorkFilter = filter;
+  
+  // Update active button state
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  event.target.classList.add('active');
+  
+  // Re-render the view
+  renderCompletedWork();
+}
+
+// Render completed work view
+function renderCompletedWork() {
+  const container = document.getElementById("completedWorkList");
+  if (!container) return;
+  
+  // Collect all completed and fulfilled needs
+  const completedNeeds = [];
+  const fulfilledNeeds = [];
+  
+  tasks.forEach(task => {
+    const needs = task.needs || [];
+    needs.forEach((need, index) => {
+      const needObj = typeof need === 'string' ? { text: need } : need;
+      if (needObj.completed) {
+        completedNeeds.push({
+          ...needObj,
+          taskId: task.id,
+          taskTitle: task.title,
+          needIndex: index,
+          type: 'completed'
+        });
+      }
+      if (needObj.fulfilled) {
+        fulfilledNeeds.push({
+          ...needObj,
+          taskId: task.id,
+          taskTitle: task.title,
+          needIndex: index,
+          type: 'fulfilled'
+        });
+      }
+    });
+  });
+  
+  // Combine and filter based on current filter
+  let allItems = [];
+  if (currentCompletedWorkFilter === 'all') {
+    allItems = [...completedNeeds, ...fulfilledNeeds];
+  } else if (currentCompletedWorkFilter === 'completed') {
+    allItems = completedNeeds;
+  } else if (currentCompletedWorkFilter === 'fulfilled') {
+    allItems = fulfilledNeeds;
+  }
+  
+  // Sort by completion date, most recent first
+  allItems.sort((a, b) => {
+    const dateA = a.completedAt || a.fulfilledAt;
+    const dateB = b.completedAt || b.fulfilledAt;
+    if (!dateA) return 1;
+    if (!dateB) return -1;
+    const timeA = dateA.seconds ? dateA.seconds : new Date(dateA).getTime() / 1000;
+    const timeB = dateB.seconds ? dateB.seconds : new Date(dateB).getTime() / 1000;
+    return timeB - timeA;
+  });
+  
+  // Update badge count
+  const badge = document.getElementById("completedWorkBadge");
+  const totalCount = completedNeeds.length + fulfilledNeeds.length;
+  if (totalCount > 0) {
+    badge.textContent = totalCount;
+    badge.style.display = "flex";
+  } else {
+    badge.style.display = "none";
+  }
+  
+  // Render
+  if (allItems.length === 0) {
+    container.innerHTML = `
+      <div class="completed-work-empty">
+        <div class="completed-work-empty-icon">✨</div>
+        <div class="completed-work-empty-text">No completed work yet</div>
+        <div class="completed-work-empty-subtext">Completed needs will appear here</div>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = allItems.map(item => {
+    const isFulfilled = item.type === 'fulfilled';
+    const completionDate = item.completedAt || item.fulfilledAt;
+    const completedBy = item.completedBy || item.fulfilledBy;
+    const dateStr = completionDate 
+      ? (completionDate.seconds 
+        ? new Date(completionDate.seconds * 1000).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        : new Date(completionDate).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }))
+      : 'Unknown date';
+    
+    // Build details sections
+    let detailsHTML = '';
+    
+    if (isFulfilled) {
+      if (item.fulfillmentNote) {
+        detailsHTML += `
+          <div class="completed-work-detail fulfilled">
+            <div class="completed-work-detail-label">Fulfillment Notes</div>
+            <div class="completed-work-detail-content">${item.fulfillmentNote}</div>
+          </div>
+        `;
+      }
+      if (item.fulfillmentContactDetails) {
+        detailsHTML += `
+          <div class="completed-work-detail fulfilled">
+            <div class="completed-work-detail-label">Contact Details</div>
+            <div class="completed-work-detail-content">${item.fulfillmentContactDetails}</div>
+          </div>
+        `;
+      }
+      if (item.fulfillmentLink) {
+        detailsHTML += `
+          <div class="completed-work-detail fulfilled">
+            <div class="completed-work-detail-label">Related Link</div>
+            <div class="completed-work-detail-content"><a href="${item.fulfillmentLink}" target="_blank" rel="noopener">${item.fulfillmentLink}</a></div>
+          </div>
+        `;
+      }
+    } else {
+      if (item.completionNote) {
+        detailsHTML += `
+          <div class="completed-work-detail">
+            <div class="completed-work-detail-label">Completion Notes</div>
+            <div class="completed-work-detail-content">${item.completionNote}</div>
+          </div>
+        `;
+      }
+      if (item.completionLink) {
+        detailsHTML += `
+          <div class="completed-work-detail">
+            <div class="completed-work-detail-label">Related Link</div>
+            <div class="completed-work-detail-content"><a href="${item.completionLink}" target="_blank" rel="noopener">${item.completionLink}</a></div>
+          </div>
+        `;
+      }
+    }
+    
+    // Add media links if available
+    if (item.needsLinks && item.needsLinks.length > 0) {
+      detailsHTML += `
+        <div class="completed-work-media">
+          <div class="completed-work-media-title">📎 Attachments</div>
+          <div class="completed-work-media-links">
+            ${item.needsLinks.map(link => `
+              <a href="${link.url}" target="_blank" rel="noopener noreferrer">🔗 ${link.text}</a>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="completed-work-card ${isFulfilled ? 'fulfilled' : ''}">
+        <div class="completed-work-header">
+          <div class="completed-work-title">
+            <h3>${item.text}</h3>
+            <div class="completed-work-subtitle">From task: ${item.taskTitle}</div>
+          </div>
+          <div class="completed-work-type ${isFulfilled ? 'fulfilled' : ''}">
+            ${isFulfilled ? '✅ Fulfilled' : '✓ Completed'}
+          </div>
+        </div>
+        <div class="completed-work-body">
+          ${detailsHTML}
+        </div>
+        <div class="completed-work-footer">
+          <div class="completed-work-by">
+            <span>By</span>
+            <strong>${completedBy || 'Unknown'}</strong>
+          </div>
+          <div class="completed-work-date">${dateStr}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function jumpTo(view, id) {
   // Switch to the correct view
   document.querySelector(`.nav-link[data-view="${view}s"]`).click();
@@ -2184,6 +2393,7 @@ function initializeApp() {
     renderReview(tasks); // Render review panel
     renderCompleted(completedTasks);
     renderCompletedBin(); // Update completed bin
+    renderCompletedWork(); // Update completed work view
     
     // Check for deadline notifications
     scheduleDeadlineCheck();

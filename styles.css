@@ -1897,6 +1897,226 @@ h1 {
 }
 
 /* ---------- Review System Styles ---------- */
+.review-badge,
+.completed-work-badge {
+  background: #ef4444;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 8px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+.completed-work-badge {
+  background: #8b5cf6;
+}
+
+/* ---------- Completed Work View ---------- */
+.completed-work-filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  background: white;
+  border: 2px solid var(--border);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text);
+}
+
+.filter-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.filter-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.completed-work-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-left: 4px solid #8b5cf6;
+}
+
+.completed-work-card.fulfilled {
+  border-left-color: #10b981;
+}
+
+.completed-work-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.completed-work-title {
+  flex: 1;
+}
+
+.completed-work-title h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.completed-work-subtitle {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.completed-work-type {
+  background: #8b5cf6;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.completed-work-type.fulfilled {
+  background: #10b981;
+}
+
+.completed-work-body {
+  margin-top: 16px;
+}
+
+.completed-work-detail {
+  background: var(--bg);
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  border-left: 3px solid #8b5cf6;
+}
+
+.completed-work-detail.fulfilled {
+  border-left-color: #10b981;
+}
+
+.completed-work-detail-label {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.completed-work-detail-content {
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.completed-work-detail-content a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.completed-work-detail-content a:hover {
+  text-decoration: underline;
+}
+
+.completed-work-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.completed-work-by {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.completed-work-by strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.completed-work-media {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.completed-work-media-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.completed-work-media-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.completed-work-media-links a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.completed-work-media-links a:hover {
+  text-decoration: underline;
+}
+
+.completed-work-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+}
+
+.completed-work-empty-icon {
+  font-size: 4rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.completed-work-empty-text {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.completed-work-empty-subtext {
+  font-size: 0.9rem;
+}
+
 .review-badge {
   background: #ef4444;
   color: white;
