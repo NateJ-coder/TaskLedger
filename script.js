@@ -2486,9 +2486,14 @@ function initializeApp() {
   const q = query(tasksCollection, orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
     // Filter tasks for current user
+    // Include tasks owned by user OR tasks where user is the reviewer
     tasks = snapshot.docs
       .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter(task => !task.owner || task.owner === currentUser);
+      .filter(task => 
+        !task.owner || 
+        task.owner === currentUser || 
+        (task.reviewer && task.reviewer.toLowerCase() === currentUser.toLowerCase())
+      );
     
     // Filter by status
     // Include tasks that are in-review but submitted by current user so they don't disappear
@@ -3000,9 +3005,25 @@ function renderReview(tasksToRender) {
       `;
     }
     
+    // Show original task attachment if present
+    let taskFileHTML = '';
+    if (task.attachedFile) {
+      taskFileHTML = `<div class="review-files"><h4>📎 Original Task File:</h4>
+        <div class="task-file-attachment">
+          <div class="file-icon">${getFileIcon(task.attachedFile.type)}</div>
+          <div class="file-info-compact">
+            <div class="file-name-small">${task.attachedFile.name}</div>
+            <div class="file-size-small">${(task.attachedFile.size / 1024).toFixed(2)} KB</div>
+          </div>
+          <a href="${task.attachedFile.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+        </div>
+      </div>`;
+    }
+    
+    // Show review submission files if present
     let filesHTML = '';
     if (submission.files && submission.files.length > 0) {
-      filesHTML = '<div class="review-files"><h4>📎 Attached Files:</h4>' +
+      filesHTML = '<div class="review-files"><h4>📎 Additional Review Files:</h4>' +
         submission.files.map(file => `
           <div class="task-file-attachment">
             <div class="file-icon">${getFileIcon(file.type)}</div>
@@ -3043,6 +3064,7 @@ function renderReview(tasksToRender) {
           <h4>📝 Completion Summary:</h4>
           <p>${submission.notes || 'No notes provided'}</p>
         </div>
+        ${taskFileHTML}
         ${filesHTML}
         ${imageHTML}
         ${linksHTML}
