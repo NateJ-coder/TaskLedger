@@ -2841,8 +2841,10 @@ function renderReview(tasksToRender) {
   
   // Only show tasks where current user is the assigned reviewer
   // This includes both 'in-review' (awaiting review) and 'needs-review' (flagged for changes)
+  // Use case-insensitive comparison to ensure reliability
   const reviewTasks = tasksToRender.filter(t => 
-    (t.status === 'in-review' || t.status === 'needs-review') && t.reviewer === currentUser
+    (t.status === 'in-review' || t.status === 'needs-review') && 
+    t.reviewer && t.reviewer.toLowerCase() === currentUser.toLowerCase()
   );
   
   // Update review badge
