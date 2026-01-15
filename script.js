@@ -3424,12 +3424,16 @@ HOW TO FULFILL NEEDS:
 KNOWLEDGE BASE:
 You have access to a knowledge base with ${context.knowledgeBaseEntries} entries containing critical information like login credentials, platform details, and important contacts.
 
+CRITICAL: When you see "RELEVANT KNOWLEDGE BASE ENTRIES" below, those entries have already been retrieved from the database. DO NOT write code or explain how to search. Simply provide the information directly from those entries to answer the user's question.
+
 When answering questions:
 1. Be concise and helpful
-2. If asked about login details or credentials, search the knowledge base
-3. Provide step-by-step instructions for TaskLedger features
+2. If knowledge base entries are provided, extract and share the relevant information directly with the user
+3. Provide step-by-step instructions for TaskLedger features when asked
 4. Reference the current context when relevant
-5. If you don't have specific information, be honest about it`;
+5. If you don't have specific information in the provided entries, be honest about it
+
+IMPORTANT: Never output code snippets about searching the knowledge base. If relevant entries are provided, read them and answer the question with the actual information.`;
 }
 
 // Send message to Gemini API
@@ -3445,8 +3449,12 @@ async function callGeminiAPI(userMessage) {
     const relevantKnowledge = await searchKnowledgeBase(userMessage);
     let knowledgeContext = '';
     if (relevantKnowledge.length > 0) {
-      knowledgeContext = '\n\nRELEVANT KNOWLEDGE BASE ENTRIES:\n' + 
-        relevantKnowledge.map(k => `- ${k.title}: ${k.content}`).join('\n');
+      console.log('Found knowledge base entries:', relevantKnowledge);
+      knowledgeContext = '\n\n=== KNOWLEDGE BASE INFORMATION (USE THIS TO ANSWER) ===\n' + 
+        relevantKnowledge.map(k => `\nTitle: ${k.title}\nInformation: ${k.content}\n`).join('\n---\n') +
+        '\n=== END OF KNOWLEDGE BASE INFORMATION ===\n\nPlease provide the relevant information from above to answer the user\'s question.';
+    } else {
+      console.log('No knowledge base entries found for query:', userMessage);
     }
     
     // Build conversation history for context
