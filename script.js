@@ -80,6 +80,7 @@ window.toggleChatBot = toggleChatBot;
 window.sendChatMessage = sendChatMessage;
 window.handleChatKeydown = handleChatKeydown;
 window.filterCompletedWork = filterCompletedWork;
+window.switchResourceTab = switchResourceTab;
 
 // -----------------------------
 // Loading Indicator Functions
@@ -1232,6 +1233,10 @@ function renderTasks(tasksToRender) {
     const priorityEmoji = priority === "high" ? "🔴" : priority === "medium" ? "🟡" : "🟢";
     const priorityLabel = priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low";
     
+    // Check if task needs review (flagged by reviewer)
+    const needsReviewBadge = task.status === 'needs-review' ? 
+      '<span class="flagged-badge">🚩 Changes Requested</span>' : '';
+    
     // Format deadline
     let deadlineHTML = "";
     if (task.deadline) {
@@ -1303,10 +1308,10 @@ function renderTasks(tasksToRender) {
     ` : "";
 
     // Show flagged feedback if task was flagged for changes
-    const flaggedHTML = task.flaggedForChanges && task.reviewFeedback ? `
+    const flaggedHTML = task.status === 'needs-review' && task.reviewFeedback ? `
       <div class="flagged-notice">
-        <strong>🚩 Flagged for Review</strong>
-        <p><strong>${task.reviewedBy}:</strong> ${task.reviewFeedback}</p>
+        <strong>🚩 Reviewer Feedback</strong>
+        <p><strong>${task.reviewedBy || 'Reviewer'}:</strong> ${task.reviewFeedback}</p>
       </div>
     ` : "";
 
@@ -1316,7 +1321,7 @@ function renderTasks(tasksToRender) {
           <strong>${task.title}</strong>
           <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
           ${deadlineHTML}
-          ${task.flaggedForChanges ? '<span class="flagged-badge">🚩 Changes Requested</span>' : ''}
+          ${needsReviewBadge}
         </div>
         <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
       </div>
@@ -2382,7 +2387,7 @@ function initializeApp() {
       .filter(task => !task.owner || task.owner === currentUser);
     
     // Filter by status
-    const activeTasks = tasks.filter(t => !t.status || t.status === 'active');
+    const activeTasks = tasks.filter(t => !t.status || t.status === 'active' || t.status === 'needs-review');
     const reviewTasks = tasks.filter(t => t.status === 'in-review');
     const completedTasks = tasks.filter(t => t.status === 'completed' || t.done);
 
