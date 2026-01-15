@@ -2609,3 +2609,13 @@ h1 {
   font-weight: 700;
   margin-left: 8px;
 }
+
+.pending-review-badge {
+  background: #3b82f6;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 8px;
+}

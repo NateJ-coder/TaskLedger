@@ -1237,6 +1237,10 @@ function renderTasks(tasksToRender) {
     const needsReviewBadge = task.status === 'needs-review' ? 
       '<span class="flagged-badge">🚩 Changes Requested</span>' : '';
     
+    // Check if task is pending review (submitted by current user)
+    const pendingReviewBadge = task.status === 'in-review' && task.reviewSubmission?.submittedBy === currentUser ?
+      '<span class="pending-review-badge">⏳ Pending Review</span>' : '';
+    
     // Format deadline
     let deadlineHTML = "";
     if (task.deadline) {
@@ -1315,6 +1319,12 @@ function renderTasks(tasksToRender) {
       </div>
     ` : "";
 
+    // Disable checkbox if task is pending review (can't toggle while awaiting review)
+    const checkboxDisabled = task.status === 'in-review' && task.reviewSubmission?.submittedBy === currentUser;
+    const checkboxHTML = checkboxDisabled 
+      ? `<input type="checkbox" checked disabled title="Task is pending review">`
+      : `<input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">`;
+
     div.innerHTML = `
       <div class="task-header">
         <div>
@@ -1322,8 +1332,9 @@ function renderTasks(tasksToRender) {
           <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
           ${deadlineHTML}
           ${needsReviewBadge}
+          ${pendingReviewBadge}
         </div>
-        <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">
+        ${checkboxHTML}
       </div>
       ${flaggedHTML}
       ${updateHistoryHTML}
@@ -2480,7 +2491,13 @@ function initializeApp() {
       .filter(task => !task.owner || task.owner === currentUser);
     
     // Filter by status
-    const activeTasks = tasks.filter(t => !t.status || t.status === 'active' || t.status === 'needs-review');
+    // Include tasks that are in-review but submitted by current user so they don't disappear
+    const activeTasks = tasks.filter(t => 
+      !t.status || 
+      t.status === 'active' || 
+      t.status === 'needs-review' ||
+      (t.status === 'in-review' && t.reviewSubmission?.submittedBy === currentUser)
+    );
     const reviewTasks = tasks.filter(t => t.status === 'in-review');
     const completedTasks = tasks.filter(t => t.status === 'completed' || t.done);
 
