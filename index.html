@@ -411,8 +411,17 @@
       <textarea id="fulfillNeedNote" placeholder="Describe how you've fulfilled this need..." rows="3"></textarea>
       <label for="fulfillContactDetails" style="display: block; margin-bottom: 6px; margin-top: 12px; font-weight: 600;">Contact Details / Client Info:</label>
       <textarea id="fulfillContactDetails" placeholder="Email, phone, client name, or other relevant contact information..." rows="2"></textarea>
-      <label for="fulfillNeedLink" style="display: block; margin-bottom: 6px; margin-top: 12px; font-weight: 600;">Related Link (optional):</label>
-      <input id="fulfillNeedLink" placeholder="https://..." type="url" />
+      
+      <label for="fulfillNeedLinks" style="display: block; margin-bottom: 6px; margin-top: 12px; font-weight: 600;">Related Links (optional):</label>
+      <textarea id="fulfillNeedLinks" placeholder="Link Name | https://...\nAnother Link | https://..." rows="2"></textarea>
+      <div style="font-size: 0.85rem; color: var(--muted); margin-top: 4px;">
+        Format: <code>Link Name | URL</code> (one per line)
+      </div>
+      
+      <label for="fulfillNeedFileInput" style="display: block; margin-bottom: 6px; margin-top: 12px; font-weight: 600;">Attach Files (optional):</label>
+      <input type="file" id="fulfillNeedFileInput" multiple style="margin-bottom: 12px;" />
+      <div id="fulfillNeedFilePreview" style="margin-bottom: 12px;"></div>
+      
       <div class="modal-actions">
         <button onclick="saveFulfillNeed()">Submit Fulfillment</button>
         <button class="secondary" onclick="closeFulfillNeedModal()">Cancel</button>

@@ -1561,7 +1561,9 @@ function openFulfillNeedModal(taskId, needIndex) {
   document.getElementById("fulfillNeedText").textContent = needText;
   document.getElementById("fulfillNeedNote").value = "";
   document.getElementById("fulfillContactDetails").value = "";
-  document.getElementById("fulfillNeedLink").value = "";
+  document.getElementById("fulfillNeedLinks").value = "";
+  document.getElementById("fulfillNeedFileInput").value = "";
+  document.getElementById("fulfillNeedFilePreview").innerHTML = "";
   document.getElementById("fulfillNeedModal").style.display = "flex";
 }
 
@@ -1570,7 +1572,9 @@ function closeFulfillNeedModal() {
   document.getElementById("fulfillNeedModal").style.display = "none";
   document.getElementById("fulfillNeedNote").value = "";
   document.getElementById("fulfillContactDetails").value = "";
-  document.getElementById("fulfillNeedLink").value = "";
+  document.getElementById("fulfillNeedLinks").value = "";
+  document.getElementById("fulfillNeedFileInput").value = "";
+  document.getElementById("fulfillNeedFilePreview").innerHTML = "";
   needToFulfillTaskId = null;
   needToFulfillIndex = null;
 }
@@ -1583,17 +1587,44 @@ async function saveFulfillNeed() {
   const task = tasks.find(t => t.id === needToFulfillTaskId);
   const note = document.getElementById("fulfillNeedNote").value.trim();
   const contactDetails = document.getElementById("fulfillContactDetails").value.trim();
-  const link = document.getElementById("fulfillNeedLink").value.trim();
+  const linksText = document.getElementById("fulfillNeedLinks").value.trim();
+  const fileInput = document.getElementById("fulfillNeedFileInput");
+  
+  // Parse links
+  const fulfillmentLinks = linksText ? linksText.split('\n').map(line => {
+    const parts = line.split('|').map(p => p.trim());
+    if (parts.length === 2 && parts[1]) {
+      return { text: parts[0] || parts[1], url: parts[1] };
+    }
+    return null;
+  }).filter(link => link !== null) : [];
   
   const needs = [...(task.needs || [])];
   if (typeof needs[needToFulfillIndex] === 'string') {
     needs[needToFulfillIndex] = { text: needs[needToFulfillIndex], priority: 'medium' };
   }
   
+  // Upload files if selected
+  const fulfillmentFiles = [];
+  if (fileInput && fileInput.files.length > 0) {
+    for (let i = 0; i < fileInput.files.length; i++) {
+      try {
+        const file = fileInput.files[i];
+        const sanitizedName = sanitizeFilename(file.name);
+        const path = `need-fulfillment/${needToFulfillTaskId}/${Date.now()}_${sanitizedName}`;
+        const fileData = await uploadFileToStorage(file, path);
+        fulfillmentFiles.push(fileData);
+      } catch (error) {
+        console.error('File upload failed:', error);
+      }
+    }
+  }
+  
   needs[needToFulfillIndex].fulfilled = true;
   needs[needToFulfillIndex].fulfillmentNote = note;
   needs[needToFulfillIndex].fulfillmentContactDetails = contactDetails;
-  needs[needToFulfillIndex].fulfillmentLink = link;
+  needs[needToFulfillIndex].fulfillmentLinks = fulfillmentLinks;
+  needs[needToFulfillIndex].fulfillmentFiles = fulfillmentFiles;
   needs[needToFulfillIndex].fulfilledAt = new Date();
   needs[needToFulfillIndex].fulfilledBy = currentUser;
   
@@ -1890,8 +1921,35 @@ function renderCompletedBin() {
       if (need.fulfillmentContactDetails) {
         detailsHTML += `<div class="completion-detail"><strong>Contact Details:</strong> ${need.fulfillmentContactDetails}</div>`;
       }
-      if (need.fulfillmentLink) {
+      
+      // Handle new fulfillmentLinks array
+      if (need.fulfillmentLinks && need.fulfillmentLinks.length > 0) {
+        detailsHTML += '<div class="completion-detail"><strong>Links:</strong></div>';
+        detailsHTML += '<div class="bin-media-links" style="margin-left: 16px;">';
+        need.fulfillmentLinks.forEach(link => {
+          detailsHTML += `<div><a href="${link.url}" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-size: 0.85rem;">🔗 ${link.text}</a></div>`;
+        });
+        detailsHTML += '</div>';
+      } else if (need.fulfillmentLink) {
+        // Backward compatibility for old single link field
         detailsHTML += `<div class="completion-detail"><strong>Link:</strong> <a href="${need.fulfillmentLink}" target="_blank" rel="noopener">${need.fulfillmentLink}</a></div>`;
+      }
+      
+      // Handle fulfillmentFiles array
+      if (need.fulfillmentFiles && need.fulfillmentFiles.length > 0) {
+        detailsHTML += '<div class="completion-detail"><strong>Files:</strong></div>';
+        need.fulfillmentFiles.forEach(file => {
+          detailsHTML += `
+            <div class="task-file-attachment" style="margin-left: 16px;">
+              <div class="file-icon">${getFileIcon(file.type)}</div>
+              <div class="file-info-compact">
+                <div class="file-name-small">${file.name}</div>
+                <div class="file-size-small">${(file.size / 1024).toFixed(2)} KB</div>
+              </div>
+              <a href="${file.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+            </div>
+          `;
+        });
       }
       
       // Add media from the need itself
@@ -2067,11 +2125,46 @@ function renderCompletedWork() {
           </div>
         `;
       }
-      if (item.fulfillmentLink) {
+      
+      // Handle new fulfillmentLinks array
+      if (item.fulfillmentLinks && item.fulfillmentLinks.length > 0) {
+        detailsHTML += `
+          <div class="completed-work-detail fulfilled">
+            <div class="completed-work-detail-label">Related Links</div>
+            <div class="completed-work-detail-content">
+              ${item.fulfillmentLinks.map(link => 
+                `<div><a href="${link.url}" target="_blank" rel="noopener">🔗 ${link.text}</a></div>`
+              ).join('')}
+            </div>
+          </div>
+        `;
+      } else if (item.fulfillmentLink) {
+        // Backward compatibility for old single link field
         detailsHTML += `
           <div class="completed-work-detail fulfilled">
             <div class="completed-work-detail-label">Related Link</div>
             <div class="completed-work-detail-content"><a href="${item.fulfillmentLink}" target="_blank" rel="noopener">${item.fulfillmentLink}</a></div>
+          </div>
+        `;
+      }
+      
+      // Handle fulfillmentFiles array
+      if (item.fulfillmentFiles && item.fulfillmentFiles.length > 0) {
+        detailsHTML += `
+          <div class="completed-work-detail fulfilled">
+            <div class="completed-work-detail-label">Attached Files</div>
+            <div class="completed-work-detail-content">
+              ${item.fulfillmentFiles.map(file => `
+                <div class="task-file-attachment">
+                  <div class="file-icon">${getFileIcon(file.type)}</div>
+                  <div class="file-info-compact">
+                    <div class="file-name-small">${file.name}</div>
+                    <div class="file-size-small">${(file.size / 1024).toFixed(2)} KB</div>
+                  </div>
+                  <a href="${file.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+                </div>
+              `).join('')}
+            </div>
           </div>
         `;
       }
