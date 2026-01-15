@@ -2495,9 +2495,6 @@ function initializeApp() {
         (task.reviewer && task.reviewer.toLowerCase() === currentUser.toLowerCase())
       );
     
-    console.log(`[${currentUser}] Total tasks after filtering:`, tasks.length);
-    console.log(`[${currentUser}] Tasks with in-review status:`, tasks.filter(t => t.status === 'in-review').map(t => ({id: t.id, title: t.title, reviewer: t.reviewer, status: t.status})));
-    
     // Filter by status
     // Include tasks that are in-review but submitted by current user so they don't disappear
     const activeTasks = tasks.filter(t => 
@@ -2962,9 +2959,6 @@ function renderReview(tasksToRender) {
   const container = document.getElementById("reviewList");
   if (!container) return;
   
-  console.log(`[${currentUser}] renderReview called with ${tasksToRender.length} tasks`);
-  console.log(`[${currentUser}] All tasks:`, tasksToRender.map(t => ({id: t.id, title: t.title, status: t.status, reviewer: t.reviewer})));
-  
   // Only show tasks where current user is the assigned reviewer
   // This includes both 'in-review' (awaiting review) and 'needs-review' (flagged for changes)
   // Use case-insensitive comparison to ensure reliability
@@ -2972,8 +2966,6 @@ function renderReview(tasksToRender) {
     (t.status === 'in-review' || t.status === 'needs-review') && 
     t.reviewer && t.reviewer.toLowerCase() === currentUser.toLowerCase()
   );
-  
-  console.log(`[${currentUser}] Filtered review tasks:`, reviewTasks.length, reviewTasks.map(t => ({title: t.title, reviewer: t.reviewer})));
   
   // Update review badge
   const badge = document.getElementById("reviewBadge");
