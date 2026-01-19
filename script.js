@@ -469,13 +469,13 @@ async function submitForReview() {
   }
   
   // Update task to in-review status
-  // Set reviewer to the opposite user (if Nate submits, Craig reviews)
-  const reviewer = currentUser === "Nate" ? "Craig" : "Nate";
+  // Always set reviewer to Craig (only Craig can verify tasks as complete)
   await updateDoc(taskDoc, {
     status: 'in-review',
     reviewSubmission: reviewSubmission,
-    reviewer: reviewer,
-    done: false // Keep done false so it doesn't show in completed
+    reviewer: 'Craig',
+    done: false, // Keep done false so it doesn't show in completed
+    flaggedForChanges: false // Clear any previous flag
   });
   
   // Add update to task history
@@ -2841,6 +2841,12 @@ async function submitReviewAction() {
 }
 
 async function verifyTaskComplete(taskId, feedback) {
+  // Only Craig can verify tasks as complete
+  if (currentUser !== "Craig") {
+    alert('Only Craig can verify tasks as complete.');
+    return;
+  }
+  
   showLoading('Approving task...');
   const task = tasks.find(t => t.id === taskId);
   const taskDoc = doc(db, "tasks", taskId);
@@ -2917,7 +2923,8 @@ async function flagForReview(taskId, feedback) {
   }
   
   // Move task to needs-review status with review feedback
-  // Set reviewer to task owner so it appears in their review dashboard
+  // Keep reviewer as Craig so only Craig can verify when resubmitted
+  // Task owner can see it in their review panel but only to resubmit
   const taskOwner = task.createdBy || (currentUser === "Nate" ? "Craig" : "Nate");
   await updateDoc(taskDoc, {
     status: 'needs-review',
@@ -2925,7 +2932,7 @@ async function flagForReview(taskId, feedback) {
     reviewedBy: currentUser,
     reviewedAt: new Date(),
     reviewFeedback: feedback,
-    reviewer: taskOwner,
+    reviewer: taskOwner, // Shows in task owner's review panel for resubmission
     flaggedForChanges: true
   });
   
@@ -3069,12 +3076,18 @@ function renderReview(tasksToRender) {
         ${imageHTML}
         ${linksHTML}
         <div class="review-actions">
-          <button class="approve-btn" onclick="openReviewFeedbackModal('${task.id}', 'approve')">
-            ✅ Verify as Complete
-          </button>
-          <button class="reject-btn" onclick="openReviewFeedbackModal('${task.id}', 'reject')">
-            🚩 Flag for Review
-          </button>
+          ${currentUser === 'Craig' ? `
+            <button class="approve-btn" onclick="openReviewFeedbackModal('${task.id}', 'approve')">
+              ✅ Verify as Complete
+            </button>
+            <button class="reject-btn" onclick="openReviewFeedbackModal('${task.id}', 'reject')">
+              🚩 Flag for Review
+            </button>
+          ` : `
+            <button class="submit-btn" onclick="openCompletionModal('${task.id}')">
+              📝 Resubmit for Review
+            </button>
+          `}
         </div>
       </div>
     `;
