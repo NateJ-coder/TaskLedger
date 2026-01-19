@@ -2485,15 +2485,9 @@ function initializeApp() {
   showLoading('Loading tasks...');
   const q = query(tasksCollection, orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
-    // Filter tasks for current user
-    // Include tasks owned by user OR tasks where user is the reviewer
+    // Load ALL tasks for collaborative access - both Craig and Nate see all tasks
     tasks = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter(task => 
-        !task.owner || 
-        task.owner === currentUser || 
-        (task.reviewer && task.reviewer.toLowerCase() === currentUser.toLowerCase())
-      );
+      .map((doc) => ({ id: doc.id, ...doc.data() }));
     
     // Filter by status
     // Include tasks that are in-review but submitted by current user so they don't disappear
