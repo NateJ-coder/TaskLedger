@@ -3440,7 +3440,7 @@ async function sendChatMessage() {
   showTypingIndicator();
   
   // Get AI response
-  const aiResponse = await callGeminiAPI(userMessage);
+  const aiResponse = await getAIResponse(userMessage);
   
   // Remove typing indicator
   removeTypingIndicator();
@@ -3484,9 +3484,9 @@ async function loadChatHistory() {
   try {
     const q = query(
       chatCollection,
-      where('user', '==', currentUser),
-      orderBy('timestamp', 'desc'),
-      // limit to last 20 messages
+      where('user', '==', currentUser)
+      // Note: orderBy removed to avoid Firebase index requirement
+      // Sorting happens client-side below
     );
     
     const snapshot = await getDocs(q);
