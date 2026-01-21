@@ -174,8 +174,14 @@
         <textarea id="taskDescription" placeholder="Full memo/description for this task" style="flex:1;"></textarea>
         <button type="button" class="ai-refine-btn" onclick="refineWithAI('taskDescription')" title="Refine with AI">🤖 Refine</button>
       </div>
-      <textarea id="taskNotes" placeholder="Private notes (not part of the memo)"></textarea>
-      <textarea id="taskNeeds" placeholder="What I need from you (one per line)"></textarea>
+      <div style="display: flex; align-items: flex-start; gap: 8px;">
+        <textarea id="taskNotes" placeholder="Private notes (not part of the memo)" style="flex:1;"></textarea>
+        <button type="button" class="ai-refine-btn" onclick="refineWithAI('taskNotes')" title="Refine with AI">🤖 Refine</button>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 8px;">
+        <textarea id="taskNeeds" placeholder="What I need from you (one per line)" style="flex:1;"></textarea>
+        <button type="button" class="ai-refine-btn" onclick="refineWithAI('taskNeeds')" title="Refine with AI">🤖 Refine</button>
+      </div>
       <div class="priority-selector">
         <label for="taskPriority">Task Priority (for boss to manage):</label>
         <select id="taskPriority" onchange="handlePriorityChange()">
@@ -216,7 +222,10 @@
       <p id="completionTaskTitle" style="color: var(--muted); margin-bottom: 16px;"></p>
       
       <label for="completionNotes" style="display: block; margin-bottom: 6px; font-weight: 600;">Completion Summary:</label>
-      <textarea id="completionNotes" placeholder="Hi Craig, I've completed this task. Here's what I did..." rows="5"></textarea>
+      <div style="display: flex; align-items: flex-start; gap: 8px;">
+        <textarea id="completionNotes" placeholder="Hi Craig, I've completed this task. Here's what I did..." rows="5" style="flex:1;"></textarea>
+        <button type="button" class="ai-refine-btn" onclick="refineWithAI('completionNotes')" title="Refine with AI">🤖 Refine</button>
+      </div>
       
       <div class="file-attachment-section">
         <label>📎 Attach Files (proof of completion):</label>
@@ -261,7 +270,10 @@
     <div class="modal-content">
       <h2>Post Progress Update</h2>
       <p id="updateTaskTitle"></p>
-      <textarea id="updateText" placeholder="What progress have you made on this task?"></textarea>
+      <div style="display: flex; align-items: flex-start; gap: 8px;">
+        <textarea id="updateText" placeholder="What progress have you made on this task?" style="flex:1;"></textarea>
+        <button type="button" class="ai-refine-btn" onclick="refineWithAI('updateText')" title="Refine with AI">🤖 Refine</button>
+      </div>
       <div class="modal-actions">
         <button onclick="saveUpdate()">Post Update</button>
         <button class="secondary" onclick="closeUpdateModal()">Cancel</button>
@@ -273,7 +285,10 @@
     <div class="modal-content">
       <h2>Edit Memo</h2>
       <p id="memoTaskTitle"></p>
-      <textarea id="memoText" placeholder="Enter detailed memo/description for this task..."></textarea>
+      <div style="display: flex; align-items: flex-start; gap: 8px;">
+        <textarea id="memoText" placeholder="Enter detailed memo/description for this task..." style="flex:1;"></textarea>
+        <button type="button" class="ai-refine-btn" onclick="refineWithAI('memoText')" title="Refine with AI">🤖 Refine</button>
+      </div>
       
       <div class="media-section">
         <h4>📎 Attachments</h4>
@@ -311,7 +326,10 @@
     <div class="modal-content">
       <h2>Edit Needs</h2>
       <p id="needsTaskTitle"></p>
-      <textarea id="needsText" placeholder="What you need from your boss (one per line)..."></textarea>
+      <div style="display: flex; align-items: flex-start; gap: 8px;">
+        <textarea id="needsText" placeholder="What you need from your boss (one per line)..." style="flex:1;"></textarea>
+        <button type="button" class="ai-refine-btn" onclick="refineWithAI('needsText')" title="Refine with AI">🤖 Refine</button>
+      </div>
       <div class="needs-help-box">
         <p class="needs-help-text">💡 <strong>How to add needs:</strong></p>
         <ul class="needs-help-list">
