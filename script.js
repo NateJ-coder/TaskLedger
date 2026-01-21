@@ -1,44 +1,3 @@
-// Gemini API integration for text refinement
-async function callGeminiAPI(prompt) {
-  // Replace with your actual Gemini API endpoint and key
-  const apiKey = config.GEMINI_API_KEY;
-  const endpoint = config.geminiApiEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }]
-  };
-  const response = await fetch(endpoint + '?key=' + apiKey, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) throw new Error('Gemini API error');
-  const data = await response.json();
-  // Extract the refined text from the response
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-// Refine textarea content with Gemini AI
-window.refineWithAI = async function(textareaId) {
-  const textarea = document.getElementById(textareaId);
-  if (!textarea) return;
-  const original = textarea.value.trim();
-  if (!original) return;
-  textarea.disabled = true;
-  const oldBtn = document.activeElement;
-  if (oldBtn) oldBtn.disabled = true;
-  try {
-    showLoading('Refining with AI...');
-    const prompt = `Neaten, summarize, and format the following text for clarity. Use bullet points and bold for key items, but do not remove crucial information.\n\nText:\n${original}`;
-    const refined = await callGeminiAPI(prompt);
-    textarea.value = refined || original;
-  } catch (e) {
-    alert('AI refinement failed: ' + e.message);
-  } finally {
-    textarea.disabled = false;
-    if (oldBtn) oldBtn.disabled = false;
-    hideLoading();
-  }
-}
 import { db, storage } from "./firebase-config.js";
 import { config } from "./config.js";
 import {
@@ -120,8 +79,52 @@ window.saveFulfillNeed = saveFulfillNeed;
 window.toggleChatBot = toggleChatBot;
 window.sendChatMessage = sendChatMessage;
 window.handleChatKeydown = handleChatKeydown;
-window.filterCompletedWork = filterCompletedWork;
+window.filterCompletedNeeds = filterCompletedNeeds;
 window.switchResourceTab = switchResourceTab;
+
+// -----------------------------
+// Gemini API integration for text refinement
+// -----------------------------
+async function callGeminiAPI(prompt) {
+  // Replace with your actual Gemini API endpoint and key
+  const apiKey = config.GEMINI_API_KEY;
+  const endpoint = config.geminiApiEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }]
+  };
+  const response = await fetch(endpoint + '?key=' + apiKey, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error('Gemini API error');
+  const data = await response.json();
+  // Extract the refined text from the response
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// Refine textarea content with Gemini AI
+window.refineWithAI = async function(textareaId) {
+  const textarea = document.getElementById(textareaId);
+  if (!textarea) return;
+  const original = textarea.value.trim();
+  if (!original) return;
+  textarea.disabled = true;
+  const oldBtn = document.activeElement;
+  if (oldBtn) oldBtn.disabled = true;
+  try {
+    showLoading('Refining with AI...');
+    const prompt = `Neaten, summarize, and format the following text for clarity. Use bullet points and bold for key items, but do not remove crucial information.\n\nText:\n${original}`;
+    const refined = await callGeminiAPI(prompt);
+    textarea.value = refined || original;
+  } catch (e) {
+    alert('AI refinement failed: ' + e.message);
+  } finally {
+    textarea.disabled = false;
+    if (oldBtn) oldBtn.disabled = false;
+    hideLoading();
+  }
+}
 
 // -----------------------------
 // Loading Indicator Functions
