@@ -1,7 +1,7 @@
 // Gemini API integration for text refinement
 async function callGeminiAPI(prompt) {
   // Replace with your actual Gemini API endpoint and key
-  const apiKey = config.geminiApiKey;
+  const apiKey = config.GEMINI_API_KEY;
   const endpoint = config.geminiApiEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
   const body = {
     contents: [{ parts: [{ text: prompt }] }]
