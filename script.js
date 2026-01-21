@@ -3335,29 +3335,7 @@ When answering questions:
 IMPORTANT: Never output code snippets about searching the knowledge base. If relevant entries are provided, read them and answer the question with the actual information.`;
 }
 
-// Send message to Gemini API
-async function callGeminiAPI(userMessage) {
-  if (!GEMINI_API_KEY) {
-    return "⚠️ Gemini API key not found. Please add GEMINI_API_KEY to your environment variables or localStorage.";
-  }
-  
-  try {
-    const systemPrompt = buildSystemPrompt();
-    
-    // Search knowledge base for relevant information
-    const relevantKnowledge = await searchKnowledgeBase(userMessage);
-    let knowledgeContext = '';
-    if (relevantKnowledge.length > 0) {
-      console.log('Found knowledge base entries:', relevantKnowledge);
-      knowledgeContext = '\n\n=== KNOWLEDGE BASE INFORMATION (USE THIS TO ANSWER) ===\n' + 
-        relevantKnowledge.map(k => `\nTitle: ${k.title}\nInformation: ${k.content}\n`).join('\n---\n') +
-        '\n=== END OF KNOWLEDGE BASE INFORMATION ===\n\nPlease provide the relevant information from above to answer the user\'s question.';
-    } else {
-      console.log('No knowledge base entries found for query:', userMessage);
-    }
-    
-    // Build conversation history for context
-    const recentHistory = chatHistory.slice(-10).map(msg => ({
+// (Removed duplicate callGeminiAPI definition. Use the top-level callGeminiAPI for all Gemini API calls.)
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
     }));
