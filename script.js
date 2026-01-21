@@ -103,6 +103,64 @@ async function callGeminiAPI(prompt) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
+// Extract key information using AI
+async function extractKeyInformation(text, context = {}) {
+  try {
+    const prompt = `Extract ONLY the critical, searchable information from the following text. Focus on:
+- Login credentials (usernames, passwords, emails)
+- Contact information (phone numbers, names, emails)
+- Platform/service names
+- Important URLs
+- Account details
+- Access codes or keys
+
+Context: ${context.type || 'general'} for task "${context.taskTitle || 'unknown'}"
+
+Format your response as a concise summary containing ONLY the factual information that could be referenced later. Remove filler words and unnecessary context. If no critical information is present, respond with "NO_KEY_INFO".
+
+Text to analyze:
+${text}
+
+CRITICAL INFO ONLY:`;
+
+    const extracted = await callGeminiAPI(prompt);
+    return extracted.trim() === 'NO_KEY_INFO' ? null : extracted;
+  } catch (error) {
+    console.error('Error extracting key information:', error);
+    return null;
+  }
+}
+
+// Save to knowledge base
+async function saveToKnowledgeBase(data) {
+  try {
+    // Check for duplicates
+    const exists = knowledgeBase.some(kb => 
+      kb.taskId === data.taskId && 
+      kb.type === data.type &&
+      kb.title === data.title
+    );
+    
+    if (!exists && data.content) {
+      await addDoc(knowledgeCollection, {
+        ...data,
+        createdAt: new Date(),
+        createdBy: currentUser
+      });
+      
+      // Update local cache
+      knowledgeBase.push({
+        id: Date.now().toString(),
+        ...data
+      });
+      
+      console.log('Saved to knowledge base:', data.title);
+    }
+  } catch (error) {
+    console.error('Error saving to knowledge base:', error);
+  }
+}
+
 // Refine textarea content with Gemini AI
 window.refineWithAI = async function(textareaId) {
   const textarea = document.getElementById(textareaId);
@@ -378,6 +436,45 @@ async function addTask() {
     attachments: [], // Initialize empty attachments array
   });
 
+  // Extract and save key information to knowledge base
+  if (description) {
+    const keyInfo = await extractKeyInformation(description, {
+      type: 'task_description',
+      taskTitle: title,
+      taskId: newTask.id
+    });
+    
+    if (keyInfo) {
+      await saveToKnowledgeBase({
+        type: 'task_description',
+        taskId: newTask.id,
+        taskTitle: title,
+        title: `Task: ${title}`,
+        content: keyInfo,
+        tags: ['task', 'description']
+      });
+    }
+  }
+
+  if (notes) {
+    const keyInfo = await extractKeyInformation(notes, {
+      type: 'task_notes',
+      taskTitle: title,
+      taskId: newTask.id
+    });
+    
+    if (keyInfo) {
+      await saveToKnowledgeBase({
+        type: 'task_notes',
+        taskId: newTask.id,
+        taskTitle: title,
+        title: `Task Notes: ${title}`,
+        content: keyInfo,
+        tags: ['task', 'notes']
+      });
+    }
+  }
+
   // Upload file if selected
   if (fileInput && fileInput.files[0]) {
     try {
@@ -651,6 +748,26 @@ async function saveMemo() {
     description: memoText,
     memoLinks: memoLinks,
   });
+
+  // Extract and save key information to knowledge base
+  if (memoText) {
+    const keyInfo = await extractKeyInformation(memoText, {
+      type: 'memo',
+      taskTitle: task.title,
+      taskId: taskToEditMemoId
+    });
+    
+    if (keyInfo) {
+      await saveToKnowledgeBase({
+        type: 'memo',
+        taskId: taskToEditMemoId,
+        taskTitle: task.title,
+        title: `Memo: ${task.title}`,
+        content: keyInfo,
+        tags: ['memo', 'description']
+      });
+    }
+  }
 
   // Upload file if selected
   if (fileInput && fileInput.files[0]) {
@@ -1576,6 +1693,28 @@ async function saveNeedCompletion() {
   
   const taskDoc = doc(db, "tasks", needToCompleteTaskId);
   await updateDoc(taskDoc, { needs });
+
+  // Extract and save key information to knowledge base
+  if (note) {
+    const completionText = `${needs[needToCompleteIndex].text}\n${note}`;
+    const keyInfo = await extractKeyInformation(completionText, {
+      type: 'need_completion',
+      taskTitle: task.title,
+      taskId: needToCompleteTaskId
+    });
+    
+    if (keyInfo) {
+      await saveToKnowledgeBase({
+        type: 'need_completion',
+        taskId: needToCompleteTaskId,
+        taskTitle: task.title,
+        needText: needs[needToCompleteIndex].text,
+        title: `Need Completed: ${needs[needToCompleteIndex].text} (${task.title})`,
+        content: keyInfo,
+        tags: ['need', 'completion', 'note']
+      });
+    }
+  }
   
   // Send notification
   const recipient = currentUser === "Nate" ? "Craig" : "Nate";
@@ -1685,6 +1824,26 @@ async function saveFulfillNeed() {
   
   const taskDoc = doc(db, "tasks", needToFulfillTaskId);
   await updateDoc(taskDoc, { needs });
+
+  // Extract and save key information to knowledge base
+  const fulfillmentText = `${needs[needToFulfillIndex].text}\n${note}\n${contactDetails}`;
+  const keyInfo = await extractKeyInformation(fulfillmentText, {
+    type: 'need_fulfillment',
+    taskTitle: task.title,
+    taskId: needToFulfillTaskId
+  });
+  
+  if (keyInfo) {
+    await saveToKnowledgeBase({
+      type: 'need_fulfillment',
+      taskId: needToFulfillTaskId,
+      taskTitle: task.title,
+      needText: needs[needToFulfillIndex].text,
+      title: `Need Fulfilled: ${needs[needToFulfillIndex].text} (${task.title})`,
+      content: keyInfo,
+      tags: ['need', 'fulfillment', 'completed']
+    });
+  }
   
   // Send notification
   const recipient = currentUser === "Nate" ? "Craig" : "Nate";
@@ -3318,24 +3477,37 @@ TASKLEDGER FEATURES:
 6. Resources: Permanent file and link storage for important documents
 7. Completed Bin: Archive for completed memos and needs
 
-HOW TO FULFILL NEEDS:
-- Click the "✅ Fulfill Need" button on any need card
-- Provide fulfillment information: notes, contact details, links
-- Fulfilled needs move to the "Fulfilled Needs" section in Completed Items
+HOW NEEDS WORK:
+- Needs can be COMPLETED (marked as done) or FULFILLED (provided with actual information)
+- When fulfilled, needs contain the actual information requested (login details, contact info, etc.)
+- When completed, needs just indicate the work was done
 
 KNOWLEDGE BASE:
-You have access to a knowledge base with ${context.knowledgeBaseEntries} entries containing critical information like login credentials, platform details, and important contacts.
+You have access to an AI-powered knowledge base with ${context.knowledgeBaseEntries} entries containing:
+- Task descriptions and notes
+- Memo content
+- Need fulfillment details (including login credentials, contact info, passwords, etc.)
+- Need completion notes
 
-CRITICAL: When you see "RELEVANT KNOWLEDGE BASE ENTRIES" below, those entries have already been retrieved from the database. DO NOT write code or explain how to search. Simply provide the information directly from those entries to answer the user's question.
+When "RELEVANT KNOWLEDGE BASE ENTRIES" appear below, they contain extracted key information from the actual data.
 
-When answering questions:
-1. Be concise and helpful
-2. If knowledge base entries are provided, extract and share the relevant information directly with the user
-3. Provide step-by-step instructions for TaskLedger features when asked
-4. Reference the current context when relevant
-5. If you don't have specific information in the provided entries, be honest about it
+CRITICAL INSTRUCTIONS:
+1. When asked about specific information (e.g., "what are the login details for X"), check the knowledge base entries provided
+2. For need fulfillments, the content will contain the actual details that were provided
+3. Be direct - if the information is in the knowledge base, state it clearly
+4. If no relevant information is found, say "I don't see that information in the knowledge base yet"
+5. Never make up information - only use what's in the provided entries
 
-IMPORTANT: Never output code snippets about searching the knowledge base. If relevant entries are provided, read them and answer the question with the actual information.`;
+Example questions you can answer:
+- "Did Craig fulfill the WhatsApp login need?" (Check for need_fulfillment entries)
+- "What are the login details for [platform]?" (Check fulfillment content)
+- "What's the memo for task X?" (Check memo entries)
+
+When answering:
+1. Be concise and direct
+2. Extract and share the specific information requested
+3. Cite which task/need the information came from
+4. If multiple entries exist, mention the most recent one`;
 }
 
 // (Removed duplicate callGeminiAPI definition. Use the top-level callGeminiAPI for all Gemini API calls.)
@@ -3344,10 +3516,10 @@ async function getAIResponse(userMessage) {
   // Search knowledge base and format results for context
   const knowledgeResults = await searchKnowledgeBase(userMessage);
   const knowledgeContext = knowledgeResults.length > 0 
-    ? '\n\nRELEVANT KNOWLEDGE BASE ENTRIES:\n' + knowledgeResults.map(item => 
-        `- ${item.title}: ${item.content}`
-      ).join('\n')
-    : '';
+    ? '\n\nRELEVANT KNOWLEDGE BASE ENTRIES:\n' + knowledgeResults.map((item, index) => 
+        `${index + 1}. [${item.type.toUpperCase()}] ${item.title}\n   Task: ${item.taskTitle}\n   Info: ${item.content}\n   ${item.needText ? `Need: ${item.needText}` : ''}`
+      ).join('\n\n')
+    : '\n\nNO RELEVANT KNOWLEDGE BASE ENTRIES FOUND - User may need to add this information first.';
   
   const systemPrompt = buildSystemPrompt();
   
@@ -3366,12 +3538,34 @@ async function getAIResponse(userMessage) {
 // Search knowledge base
 async function searchKnowledgeBase(query) {
   const queryLower = query.toLowerCase();
+  
+  // Extract task name if mentioned
+  const taskMatch = query.match(/task\s+["']?([^"']+)["']?/i);
+  const taskName = taskMatch ? taskMatch[1].toLowerCase() : null;
+  
   return knowledgeBase.filter(item => {
     const titleMatch = item.title?.toLowerCase().includes(queryLower);
     const contentMatch = item.content?.toLowerCase().includes(queryLower);
     const tagsMatch = item.tags?.some(tag => queryLower.includes(tag.toLowerCase()));
-    return titleMatch || contentMatch || tagsMatch;
-  }).slice(0, 3); // Return top 3 matches
+    const taskTitleMatch = item.taskTitle?.toLowerCase().includes(queryLower);
+    const needTextMatch = item.needText?.toLowerCase().includes(queryLower);
+    
+    // If a specific task is mentioned, prioritize entries from that task
+    if (taskName && item.taskTitle) {
+      const taskNameMatch = item.taskTitle.toLowerCase().includes(taskName);
+      if (taskNameMatch) {
+        return true;
+      }
+    }
+    
+    return titleMatch || contentMatch || tagsMatch || taskTitleMatch || needTextMatch;
+  })
+  .sort((a, b) => {
+    // Sort by relevance - prioritize fulfillments and completions
+    const typeOrder = { 'need_fulfillment': 1, 'need_completion': 2, 'memo': 3, 'task_description': 4 };
+    return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+  })
+  .slice(0, 5); // Return top 5 matches
 }
 
 // Add message to chat UI
