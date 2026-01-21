@@ -1,3 +1,44 @@
+// Gemini API integration for text refinement
+async function callGeminiAPI(prompt) {
+  // Replace with your actual Gemini API endpoint and key
+  const apiKey = config.geminiApiKey;
+  const endpoint = config.geminiApiEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }]
+  };
+  const response = await fetch(endpoint + '?key=' + apiKey, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error('Gemini API error');
+  const data = await response.json();
+  // Extract the refined text from the response
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// Refine textarea content with Gemini AI
+window.refineWithAI = async function(textareaId) {
+  const textarea = document.getElementById(textareaId);
+  if (!textarea) return;
+  const original = textarea.value.trim();
+  if (!original) return;
+  textarea.disabled = true;
+  const oldBtn = document.activeElement;
+  if (oldBtn) oldBtn.disabled = true;
+  try {
+    showLoading('Refining with AI...');
+    const prompt = `Neaten, summarize, and format the following text for clarity. Use bullet points and bold for key items, but do not remove crucial information.\n\nText:\n${original}`;
+    const refined = await callGeminiAPI(prompt);
+    textarea.value = refined || original;
+  } catch (e) {
+    alert('AI refinement failed: ' + e.message);
+  } finally {
+    textarea.disabled = false;
+    if (oldBtn) oldBtn.disabled = false;
+    hideLoading();
+  }
+}
 import { db, storage } from "./firebase-config.js";
 import { config } from "./config.js";
 import {
@@ -2000,242 +2041,93 @@ function renderCompletedBin() {
   }
 }
 
-// Global filter state for completed work view
-let currentCompletedWorkFilter = 'all';
+// Global filter state for completed needs view
+let currentCompletedNeedsFilter = 'all';
 
-// Filter completed work
-function filterCompletedWork(filter) {
-  currentCompletedWorkFilter = filter;
-  
+// Filter completed needs
+function filterCompletedNeeds(filter) {
+  currentCompletedNeedsFilter = filter;
   // Update active button state
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.classList.remove('active');
   });
   event.target.classList.add('active');
-  
   // Re-render the view
-  renderCompletedWork();
+  renderCompletedNeeds();
 }
 
-// Render completed work view
-function renderCompletedWork() {
-  const container = document.getElementById("completedWorkList");
+// Render completed needs view (task label with dropdown, needs as sub-items)
+function renderCompletedNeeds() {
+  const container = document.getElementById("completedNeedsList");
   if (!container) return;
-  
-  // Collect all completed and fulfilled needs
-  const completedNeeds = [];
-  const fulfilledNeeds = [];
-  
+
+  // Group completed/fulfilled needs by task
+  const taskMap = {};
   tasks.forEach(task => {
     const needs = task.needs || [];
-    needs.forEach((need, index) => {
-      const needObj = typeof need === 'string' ? { text: need } : need;
-      if (needObj.completed) {
-        completedNeeds.push({
-          ...needObj,
-          taskId: task.id,
-          taskTitle: task.title,
-          needIndex: index,
-          type: 'completed'
-        });
-      }
-      if (needObj.fulfilled) {
-        fulfilledNeeds.push({
-          ...needObj,
-          taskId: task.id,
-          taskTitle: task.title,
-          needIndex: index,
-          type: 'fulfilled'
-        });
-      }
-    });
+    const completedNeeds = needs
+      .map((need, idx) => ({
+        ...((typeof need === 'string') ? { text: need } : need),
+        needIndex: idx
+      }))
+      .filter(needObj => needObj.completed || needObj.fulfilled);
+    if (completedNeeds.length > 0) {
+      taskMap[task.id] = {
+        title: task.title,
+        needs: completedNeeds
+      };
+    }
   });
-  
-  // Combine and filter based on current filter
-  let allItems = [];
-  if (currentCompletedWorkFilter === 'all') {
-    allItems = [...completedNeeds, ...fulfilledNeeds];
-  } else if (currentCompletedWorkFilter === 'completed') {
-    allItems = completedNeeds;
-  } else if (currentCompletedWorkFilter === 'fulfilled') {
-    allItems = fulfilledNeeds;
-  }
-  
-  // Sort by completion date, most recent first
-  allItems.sort((a, b) => {
-    const dateA = a.completedAt || a.fulfilledAt;
-    const dateB = b.completedAt || b.fulfilledAt;
-    if (!dateA) return 1;
-    if (!dateB) return -1;
-    const timeA = dateA.seconds ? dateA.seconds : new Date(dateA).getTime() / 1000;
-    const timeB = dateB.seconds ? dateB.seconds : new Date(dateB).getTime() / 1000;
-    return timeB - timeA;
-  });
-  
-  // Update badge count
-  const badge = document.getElementById("completedWorkBadge");
-  const totalCount = completedNeeds.length + fulfilledNeeds.length;
-  if (totalCount > 0) {
-    badge.textContent = totalCount;
-    badge.style.display = "flex";
-  } else {
-    badge.style.display = "none";
-  }
-  
-  // Render
-  if (allItems.length === 0) {
+
+  const taskIds = Object.keys(taskMap);
+  if (taskIds.length === 0) {
     container.innerHTML = `
-      <div class="completed-work-empty">
-        <div class="completed-work-empty-icon">✨</div>
-        <div class="completed-work-empty-text">No completed work yet</div>
-        <div class="completed-work-empty-subtext">Completed needs will appear here</div>
+      <div class="completed-needs-empty">
+        <div class="completed-needs-empty-icon">✅</div>
+        <div class="completed-needs-empty-text">No completed needs yet</div>
+        <div class="completed-needs-empty-subtext">Completed needs will appear here</div>
       </div>
     `;
     return;
   }
-  
-  container.innerHTML = allItems.map(item => {
-    const isFulfilled = item.type === 'fulfilled';
-    const completionDate = item.completedAt || item.fulfilledAt;
-    const completedBy = item.completedBy || item.fulfilledBy;
-    const dateStr = completionDate 
-      ? (completionDate.seconds 
-        ? new Date(completionDate.seconds * 1000).toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        : new Date(completionDate).toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }))
-      : 'Unknown date';
-    
-    // Build details sections
-    let detailsHTML = '';
-    
-    if (isFulfilled) {
-      if (item.fulfillmentNote) {
-        detailsHTML += `
-          <div class="completed-work-detail fulfilled">
-            <div class="completed-work-detail-label">Fulfillment Notes</div>
-            <div class="completed-work-detail-content">${item.fulfillmentNote}</div>
-          </div>
-        `;
-      }
-      if (item.fulfillmentContactDetails) {
-        detailsHTML += `
-          <div class="completed-work-detail fulfilled">
-            <div class="completed-work-detail-label">Contact Details</div>
-            <div class="completed-work-detail-content">${item.fulfillmentContactDetails}</div>
-          </div>
-        `;
-      }
-      
-      // Handle new fulfillmentLinks array
-      if (item.fulfillmentLinks && item.fulfillmentLinks.length > 0) {
-        detailsHTML += `
-          <div class="completed-work-detail fulfilled">
-            <div class="completed-work-detail-label">Related Links</div>
-            <div class="completed-work-detail-content">
-              ${item.fulfillmentLinks.map(link => 
-                `<div><a href="${link.url}" target="_blank" rel="noopener">🔗 ${link.text}</a></div>`
-              ).join('')}
-            </div>
-          </div>
-        `;
-      } else if (item.fulfillmentLink) {
-        // Backward compatibility for old single link field
-        detailsHTML += `
-          <div class="completed-work-detail fulfilled">
-            <div class="completed-work-detail-label">Related Link</div>
-            <div class="completed-work-detail-content"><a href="${item.fulfillmentLink}" target="_blank" rel="noopener">${item.fulfillmentLink}</a></div>
-          </div>
-        `;
-      }
-      
-      // Handle fulfillmentFiles array
-      if (item.fulfillmentFiles && item.fulfillmentFiles.length > 0) {
-        detailsHTML += `
-          <div class="completed-work-detail fulfilled">
-            <div class="completed-work-detail-label">Attached Files</div>
-            <div class="completed-work-detail-content">
-              ${item.fulfillmentFiles.map(file => `
-                <div class="task-file-attachment">
-                  <div class="file-icon">${getFileIcon(file.type)}</div>
-                  <div class="file-info-compact">
-                    <div class="file-name-small">${file.name}</div>
-                    <div class="file-size-small">${(file.size / 1024).toFixed(2)} KB</div>
-                  </div>
-                  <a href="${file.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `;
-      }
-    } else {
-      if (item.completionNote) {
-        detailsHTML += `
-          <div class="completed-work-detail">
-            <div class="completed-work-detail-label">Completion Notes</div>
-            <div class="completed-work-detail-content">${item.completionNote}</div>
-          </div>
-        `;
-      }
-      if (item.completionLink) {
-        detailsHTML += `
-          <div class="completed-work-detail">
-            <div class="completed-work-detail-label">Related Link</div>
-            <div class="completed-work-detail-content"><a href="${item.completionLink}" target="_blank" rel="noopener">${item.completionLink}</a></div>
-          </div>
-        `;
-      }
-    }
-    
-    // Add media links if available
-    if (item.needsLinks && item.needsLinks.length > 0) {
-      detailsHTML += `
-        <div class="completed-work-media">
-          <div class="completed-work-media-title">📎 Attachments</div>
-          <div class="completed-work-media-links">
-            ${item.needsLinks.map(link => `
-              <a href="${link.url}" target="_blank" rel="noopener noreferrer">🔗 ${link.text}</a>
-            `).join('')}
-          </div>
-        </div>
-      `;
-    }
-    
+
+  container.innerHTML = taskIds.map(taskId => {
+    const task = taskMap[taskId];
     return `
-      <div class="completed-work-card ${isFulfilled ? 'fulfilled' : ''}">
-        <div class="completed-work-header">
-          <div class="completed-work-title">
-            <h3>${item.text}</h3>
-            <div class="completed-work-subtitle">From task: ${item.taskTitle}</div>
-          </div>
-          <div class="completed-work-type ${isFulfilled ? 'fulfilled' : ''}">
-            ${isFulfilled ? '✅ Fulfilled' : '✓ Completed'}
-          </div>
+      <div class="completed-needs-task">
+        <div class="completed-needs-task-label" onclick="toggleCompletedNeedsDropdown('${taskId}')">
+          <span class="dropdown-arrow" id="arrow-${taskId}">▶</span>
+          <span class="task-title">${task.title}</span>
         </div>
-        <div class="completed-work-body">
-          ${detailsHTML}
-        </div>
-        <div class="completed-work-footer">
-          <div class="completed-work-by">
-            <span>By</span>
-            <strong>${completedBy || 'Unknown'}</strong>
-          </div>
-          <div class="completed-work-date">${dateStr}</div>
+        <div class="completed-needs-dropdown" id="dropdown-${taskId}" style="display:none;">
+          ${task.needs.map(need => `
+            <div class="completed-needs-need-label" onclick="showCompletedNeedDetails('${taskId}', ${need.needIndex})">
+              <span class="need-title">${need.title || need.text || 'Untitled Need'}</span>
+            </div>
+          `).join('')}
         </div>
       </div>
     `;
   }).join('');
+}
+
+// Toggle dropdown for completed needs by task
+window.toggleCompletedNeedsDropdown = function(taskId) {
+  const dropdown = document.getElementById(`dropdown-${taskId}`);
+  const arrow = document.getElementById(`arrow-${taskId}`);
+  if (dropdown.style.display === 'none') {
+    dropdown.style.display = 'block';
+    if (arrow) arrow.textContent = '▼';
+  } else {
+    dropdown.style.display = 'none';
+    if (arrow) arrow.textContent = '▶';
+  }
+}
+
+// Show popup with completed need details
+window.showCompletedNeedDetails = function(taskId, needIndex) {
+  // Implementation for popup will be added in the next step
+  alert('Show popup for need details: ' + taskId + ', ' + needIndex);
 }
 
 function jumpTo(view, id) {

@@ -1900,7 +1900,7 @@ h1 {
 
 /* ---------- Review System Styles ---------- */
 .review-badge,
-.completed-work-badge {
+.completed-needs-badge {
   background: #ef4444;
   color: white;
   border-radius: 12px;
@@ -1918,8 +1918,8 @@ h1 {
   background: #8b5cf6;
 }
 
-/* ---------- Completed Work View ---------- */
-.completed-work-filters {
+/* ---------- Completed Needs View ---------- */
+.completed-needs-filters {
   display: flex;
   gap: 12px;
   margin-bottom: 24px;
@@ -1949,7 +1949,7 @@ h1 {
   border-color: var(--accent);
 }
 
-.completed-work-card {
+.completed-needs-card {
   background: white;
   border-radius: 12px;
   padding: 20px;
@@ -1958,11 +1958,11 @@ h1 {
   border-left: 4px solid #8b5cf6;
 }
 
-.completed-work-card.fulfilled {
+.completed-needs-card.fulfilled {
   border-left-color: #10b981;
 }
 
-.completed-work-header {
+.completed-needs-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -1970,23 +1970,23 @@ h1 {
   gap: 12px;
 }
 
-.completed-work-title {
+.completed-needs-title {
   flex: 1;
 }
 
-.completed-work-title h3 {
+.completed-needs-title h3 {
   margin: 0 0 4px 0;
   font-size: 1.1rem;
   color: var(--text);
 }
 
-.completed-work-subtitle {
+.completed-needs-subtitle {
   font-size: 0.85rem;
   color: var(--muted);
   font-style: italic;
 }
 
-.completed-work-type {
+.completed-needs-type {
   background: #8b5cf6;
   color: white;
   padding: 6px 12px;
@@ -1996,15 +1996,15 @@ h1 {
   white-space: nowrap;
 }
 
-.completed-work-type.fulfilled {
+.completed-needs-type.fulfilled {
   background: #10b981;
 }
 
-.completed-work-body {
+.completed-needs-body {
   margin-top: 16px;
 }
 
-.completed-work-detail {
+.completed-needs-detail {
   background: var(--bg);
   padding: 12px;
   border-radius: 8px;
@@ -2012,11 +2012,11 @@ h1 {
   border-left: 3px solid #8b5cf6;
 }
 
-.completed-work-detail.fulfilled {
+.completed-needs-detail.fulfilled {
   border-left-color: #10b981;
 }
 
-.completed-work-detail-label {
+.completed-needs-detail-label {
   font-weight: 600;
   color: var(--text);
   margin-bottom: 4px;
@@ -2025,24 +2025,24 @@ h1 {
   letter-spacing: 0.5px;
 }
 
-.completed-work-detail-content {
+.completed-needs-detail-content {
   color: var(--text);
   font-size: 0.95rem;
   line-height: 1.5;
   white-space: pre-wrap;
 }
 
-.completed-work-detail-content a {
+.completed-needs-detail-content a {
   color: var(--accent);
   text-decoration: none;
   word-break: break-all;
 }
 
-.completed-work-detail-content a:hover {
+.completed-needs-detail-content a:hover {
   text-decoration: underline;
 }
 
-.completed-work-footer {
+.completed-needs-footer {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
@@ -2053,38 +2053,38 @@ h1 {
   color: var(--muted);
 }
 
-.completed-work-by {
+.completed-needs-by {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.completed-work-by strong {
+.completed-needs-by strong {
   color: var(--text);
   font-weight: 600;
 }
 
-.completed-work-media {
+.completed-needs-media {
   margin-top: 12px;
   padding: 12px;
   background: var(--bg);
   border-radius: 8px;
 }
 
-.completed-work-media-title {
+.completed-needs-media-title {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--muted);
   margin-bottom: 8px;
 }
 
-.completed-work-media-links {
+.completed-needs-media-links {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.completed-work-media-links a {
+.completed-needs-media-links a {
   color: var(--accent);
   text-decoration: none;
   font-size: 0.9rem;
@@ -2093,29 +2093,29 @@ h1 {
   gap: 6px;
 }
 
-.completed-work-media-links a:hover {
+.completed-needs-media-links a:hover {
   text-decoration: underline;
 }
 
-.completed-work-empty {
+.completed-needs-empty {
   text-align: center;
   padding: 60px 20px;
   color: var(--muted);
 }
 
-.completed-work-empty-icon {
+.completed-needs-empty-icon {
   font-size: 4rem;
   margin-bottom: 16px;
   opacity: 0.5;
 }
 
-.completed-work-empty-text {
+.completed-needs-empty-text {
   font-size: 1.1rem;
   font-weight: 600;
   margin-bottom: 8px;
 }
 
-.completed-work-empty-subtext {
+.completed-needs-empty-subtext {
   font-size: 0.9rem;
 }
 
