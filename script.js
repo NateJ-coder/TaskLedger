@@ -3336,39 +3336,26 @@ IMPORTANT: Never output code snippets about searching the knowledge base. If rel
 }
 
 // (Removed duplicate callGeminiAPI definition. Use the top-level callGeminiAPI for all Gemini API calls.)
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }]
-    }));
-    
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            ...recentHistory,
-            {
-              role: 'user',
-              parts: [{ text: systemPrompt + knowledgeContext + '\n\nUser question: ' + userMessage }]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1024,
-          }
-        })
-      }
+// Get AI response
+async function getAIResponse(userMessage) {
+  // Search knowledge base and format results for context
+  const knowledgeResults = await searchKnowledgeBase(userMessage);
+  const knowledgeContext = knowledgeResults.length > 0 
+    ? '\n\nRELEVANT KNOWLEDGE BASE ENTRIES:\n' + knowledgeResults.map(item => 
+        `- ${item.title}: ${item.content}`
+      ).join('\n')
+    : '';
+  
+  const systemPrompt = buildSystemPrompt();
+  
+  try {
+    const response = await callGeminiAPI(
+      systemPrompt + knowledgeContext + '\n\nUser question: ' + userMessage
     );
     
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
+    return response;
   } catch (error) {
-    console.error('Error calling Gemini API:', error);
+    console.error('Error getting AI response:', error);
     return `Sorry, I encountered an error: ${error.message}. Please try again.`;
   }
 }
