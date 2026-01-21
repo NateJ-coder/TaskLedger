@@ -235,9 +235,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       
-      // Render completed work view when activated
-      if (viewName === "completed-work") {
-        renderCompletedWork();
+      // Render completed needs view when activated
+      if (viewName === "completed-needs") {
+        renderCompletedNeeds();
       }
     }, { passive: false });
   });
@@ -2402,7 +2402,7 @@ function initializeApp() {
     renderReview(tasks); // Render review panel
     renderCompleted(completedTasks);
     renderCompletedBin(); // Update completed bin
-    renderCompletedWork(); // Update completed work view
+    renderCompletedNeeds(); // Update completed needs view
     
     // Check for deadline notifications
     scheduleDeadlineCheck();
