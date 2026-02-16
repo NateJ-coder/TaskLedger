@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // TaskLedger collections used by the app
+    match /tasks/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /notifications/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /messages/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /chatHistory/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /knowledgeBase/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /deadlinePushRequests/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /permanentFiles/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Deny everything else by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

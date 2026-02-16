@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Task files, memo files, need files
+    match /tasks/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /memos/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /needs/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Review submission uploads
+    match /review-submissions/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Permanent resources
+    match /permanentFiles/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Deny everything else by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
