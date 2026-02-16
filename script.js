@@ -1,4 +1,4 @@
-import { db, storage } from "./firebase-config.js";
+import { db, storage, ensureFirebaseSession } from "./firebase-config.js";
 import { config } from "./config.js";
 import {
   collection,
@@ -252,12 +252,33 @@ let deadlinePushRequests = [];
 let taskToEditLandmarksId = null;
 let pushRequestTaskId = null;
 let pushRequestLandmarkIndex = null;
+let hasShownFirebasePermissionAlert = false;
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
 const messagesCollection = collection(db, "messages");
 const chatCollection = collection(db, "chatHistory");
 const knowledgeCollection = collection(db, "knowledgeBase");
 const deadlinePushCollection = collection(db, "deadlinePushRequests");
+
+function handleFirebasePermissionError(source, error) {
+  if (error?.code !== "permission-denied") return;
+
+  const details = [
+    `Firestore denied access while loading ${source}.`,
+    "Most likely cause: Firestore Rules require authenticated users or specific role checks.",
+    "Code-side fix applied: app now signs in anonymously before reading Firestore.",
+    "If this still happens, enable Anonymous auth in Firebase Console and update Firestore rules.",
+  ].join("\n");
+
+  console.error(details, error);
+
+  if (!hasShownFirebasePermissionAlert) {
+    hasShownFirebasePermissionAlert = true;
+    alert(
+      "Firebase permissions are blocking data access. Open DevTools for details and complete the Firebase Console steps (Anonymous Auth + Firestore rules)."
+    );
+  }
+}
 
 // -----------------------------
 // Login/Logout Functions
@@ -270,7 +291,7 @@ function logout() {
   }
 }
 
-function checkLogin() {
+async function checkLogin() {
   const savedUser = localStorage.getItem("taskledger_user");
   if (savedUser) {
     currentUser = savedUser;
@@ -283,7 +304,15 @@ function checkLogin() {
       });
     }
     
-    initializeApp();
+    try {
+      await ensureFirebaseSession();
+      initializeApp();
+    } catch (error) {
+      console.error("Firebase authentication setup failed:", error);
+      alert(
+        "Unable to establish Firebase session. Enable Anonymous sign-in in Firebase Console (Authentication > Sign-in method) and refresh."
+      );
+    }
   } else {
     // Redirect to login page if not logged in
     window.location.href = "login.html";
@@ -294,7 +323,9 @@ function checkLogin() {
 // Navigation
 // -----------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  checkLogin();
+  checkLogin().catch((error) => {
+    console.error("Login initialization failed:", error);
+  });
   
   const navLinks = document.querySelectorAll(".nav-link");
   const views = document.querySelectorAll(".view");
@@ -2933,6 +2964,7 @@ function initializeApp() {
     hideLoading();
   }, (error) => {
     console.log("Error fetching tasks:", error);
+    handleFirebasePermissionError("tasks", error);
     hideLoading();
   });
 
@@ -3007,6 +3039,7 @@ function initializeApp() {
     hideLoading();
   }, (error) => {
     console.log("Error fetching notifications:", error);
+    handleFirebasePermissionError("notifications", error);
     hideLoading();
     console.log("If you see an index error, please create the composite index in Firebase Console");
     console.log("Or check the error message for a direct link to create it");
@@ -3024,6 +3057,7 @@ function initializeApp() {
     console.log(`${messages.length} message(s) received for ${currentUser}`);
   }, (error) => {
     console.log("Error fetching messages:", error);
+    handleFirebasePermissionError("messages", error);
     console.log("If you see an index error, please create the composite index in Firebase Console");
   });
 
@@ -4208,6 +4242,7 @@ async function loadKnowledgeBase() {
     console.log(`Loaded ${knowledgeBase.length} knowledge base entries`);
   } catch (error) {
     console.error('Error loading knowledge base:', error);
+    handleFirebasePermissionError("knowledge base", error);
   }
 }
 
