@@ -10,6 +10,7 @@ import {
   orderBy,
   where,
   getDocs,
+  getDoc,
   deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
@@ -81,6 +82,22 @@ window.sendChatMessage = sendChatMessage;
 window.handleChatKeydown = handleChatKeydown;
 window.filterCompletedNeeds = filterCompletedNeeds;
 window.switchResourceTab = switchResourceTab;
+// Expose clear functions and deadline/priority
+window.clearAllMessages = clearAllMessages;
+window.clearCompletedBin = clearCompletedBin;
+window.openDeadlineEditModal = openDeadlineEditModal;
+window.closeDeadlineEditModal = closeDeadlineEditModal;
+window.saveTaskDeadline = saveTaskDeadline;
+window.togglePriorityFlag = togglePriorityFlag;
+// Landmarks & Deadline Push
+window.openLandmarksModal = openLandmarksModal;
+window.closeLandmarksModal = closeLandmarksModal;
+window.saveLandmarks = saveLandmarks;
+window.openDeadlinePushModal = openDeadlinePushModal;
+window.closeDeadlinePushModal = closeDeadlinePushModal;
+window.submitDeadlinePushRequest = submitDeadlinePushRequest;
+window.approveDeadlinePush = approveDeadlinePush;
+window.declineDeadlinePush = declineDeadlinePush;
 
 // -----------------------------
 // Gemini API integration for text refinement
@@ -231,11 +248,16 @@ let needToFulfillTaskId = null;
 let needToFulfillIndex = null;
 let chatHistory = [];
 let knowledgeBase = [];
+let deadlinePushRequests = [];
+let taskToEditLandmarksId = null;
+let pushRequestTaskId = null;
+let pushRequestLandmarkIndex = null;
 const tasksCollection = collection(db, "tasks");
 const notificationsCollection = collection(db, "notifications");
 const messagesCollection = collection(db, "messages");
 const chatCollection = collection(db, "chatHistory");
 const knowledgeCollection = collection(db, "knowledgeBase");
+const deadlinePushCollection = collection(db, "deadlinePushRequests");
 
 // -----------------------------
 // Login/Logout Functions
@@ -796,6 +818,71 @@ async function saveMemo() {
 }
 
 // -----------------------------
+// Deadline Edit Logic
+// -----------------------------
+let taskToEditDeadlineId = null;
+function openDeadlineEditModal(id) {
+  const task = tasks.find(t => t.id === id);
+  taskToEditDeadlineId = id;
+  document.getElementById('deadlineEditTaskTitle').textContent = `Set deadline for: ${task.title}`;
+  const existing = task.deadline?.seconds ? new Date(task.deadline.seconds * 1000) : (task.deadline ? new Date(task.deadline) : null);
+  document.getElementById('deadlineEditDate').value = existing ? existing.toISOString().slice(0,10) : '';
+  document.getElementById('deadlineEditModal').style.display = 'flex';
+}
+
+function closeDeadlineEditModal() {
+  document.getElementById('deadlineEditModal').style.display = 'none';
+  taskToEditDeadlineId = null;
+}
+
+async function saveTaskDeadline() {
+  if (!taskToEditDeadlineId) return;
+  const dateStr = document.getElementById('deadlineEditDate').value;
+  if (!dateStr) { alert('Please select a date'); return; }
+  showLoading('Saving deadline...');
+  try {
+    const deadline = new Date(dateStr);
+    await updateDoc(doc(db, 'tasks', taskToEditDeadlineId), { deadline });
+    // Notify other user
+    const task = tasks.find(t => t.id === taskToEditDeadlineId);
+    const recipient = currentUser === 'Nate' ? 'Craig' : 'Nate';
+    await addDoc(notificationsCollection, {
+      type: 'deadline_updated',
+      taskId: taskToEditDeadlineId,
+      message: `${currentUser} set deadline for "${task.title}" to ${deadline.toLocaleDateString()}`,
+      createdAt: new Date(),
+      read: false,
+      recipient,
+      sender: currentUser,
+    });
+  } catch (e) {
+    console.error('Error saving deadline:', e);
+    alert('Failed to save deadline');
+  }
+  closeDeadlineEditModal();
+  hideLoading();
+}
+
+// Urgent Priority Flag
+async function togglePriorityFlag(taskId) {
+  try {
+    const task = tasks.find(t => t.id === taskId);
+    const newVal = !task.priorityFlagged;
+    await updateDoc(doc(db, 'tasks', taskId), { priorityFlagged: newVal });
+    const recipient = currentUser === 'Nate' ? 'Craig' : 'Nate';
+    await addDoc(notificationsCollection, {
+      type: 'priority_flag_toggled',
+      taskId,
+      message: `${currentUser} ${newVal ? 'flagged as Urgent' : 'removed Urgent flag'}: "${task.title}"`,
+      createdAt: new Date(),
+      read: false,
+      recipient,
+      sender: currentUser,
+    });
+  } catch (e) {
+    console.error('Error toggling urgent flag:', e);
+  }
+}
 // Attachment Modal Logic
 // -----------------------------
 function openAttachmentModal(id) {
@@ -879,6 +966,148 @@ async function removeAttachment(taskId, attachmentIndex) {
 }
 
 // -----------------------------
+// Landmarks Modal Logic
+// -----------------------------
+function openLandmarksModal(id) {
+  const task = tasks.find(t => t.id === id);
+  taskToEditLandmarksId = id;
+  document.getElementById("landmarksTaskTitle").textContent = `Edit landmarks for: ${task.title}`;
+
+  // Pre-fill textarea from existing landmarks
+  const landmarks = task.landmarks || [];
+  const lines = landmarks.map(l => {
+    const p = l.priority ? `[${l.priority}]` : '';
+    const d = l.dueDate ? `[due:${new Date(l.dueDate).toISOString().slice(0,10)}]` : '';
+    return `${l.title} ${p} ${d}`.trim();
+  });
+  document.getElementById("landmarksText").value = lines.join('\n');
+
+  // Render existing list with Request Push buttons
+  const list = document.getElementById("landmarksExistingList");
+  if (landmarks.length === 0) {
+    list.innerHTML = "<p style='color: var(--muted);'>No landmarks yet.</p>";
+  } else {
+    list.innerHTML = `<div class="needs-help-text" style="margin-top:12px;">Existing Landmarks</div>` +
+      landmarks.map((l, idx) => {
+        const due = l.dueDate ? new Date(l.dueDate).toLocaleDateString() : 'No due date';
+        const btn = l.dueDate ? `<button style="margin-left:8px;" onclick="openDeadlinePushModal('${id}', ${idx})">⏳ Request Deadline Push</button>` : '';
+        const status = l.completed ? '✅ Completed' : '⏳ Pending';
+        return `<div style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+          <span>🏁 ${l.title} • ${status} • ${due}</span>${btn}
+        </div>`;
+      }).join('');
+  }
+
+  document.getElementById("landmarksModal").style.display = "flex";
+}
+
+function closeLandmarksModal() {
+  document.getElementById("landmarksModal").style.display = "none";
+  document.getElementById("landmarksText").value = "";
+  document.getElementById("landmarksExistingList").innerHTML = "";
+  taskToEditLandmarksId = null;
+}
+
+async function saveLandmarks() {
+  if (!taskToEditLandmarksId) return;
+  showLoading('Saving landmarks...');
+  const task = tasks.find(t => t.id === taskToEditLandmarksId);
+  const text = document.getElementById('landmarksText').value.trim();
+  const lines = text ? text.split('\n').map(l => l.trim()).filter(Boolean) : [];
+
+  const parsed = lines.map((line, i) => {
+    const pri = /\[(high|medium|low)\]/i.exec(line);
+    const due = /\[due:([0-9]{4}-[0-9]{2}-[0-9]{2})\]/i.exec(line);
+    let title = line.replace(/\[(high|medium|low)\]/ig, '').replace(/\[due:[^\]]+\]/ig, '').trim();
+    return {
+      title,
+      priority: pri ? pri[1].toLowerCase() : 'medium',
+      dueDate: due ? new Date(due[1]).toISOString() : null,
+      completed: false,
+      order: i,
+      createdAt: new Date()
+    };
+  });
+
+  const taskDocRef = doc(db, 'tasks', taskToEditLandmarksId);
+  await updateDoc(taskDocRef, { landmarks: parsed });
+
+  // Notify other user
+  const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+  try {
+    await addDoc(notificationsCollection, {
+      type: 'landmarks_updated',
+      taskId: taskToEditLandmarksId,
+      message: `${currentUser} updated landmarks for "${task.title}"`,
+      createdAt: new Date(),
+      read: false,
+      recipient,
+      sender: currentUser,
+    });
+  } catch {}
+
+  closeLandmarksModal();
+  hideLoading();
+}
+
+function openDeadlinePushModal(taskId, landmarkIndex) {
+  pushRequestTaskId = taskId;
+  pushRequestLandmarkIndex = landmarkIndex;
+  const task = tasks.find(t => t.id === taskId);
+  const lm = (task.landmarks || [])[landmarkIndex];
+  const ctx = `${task.title} → ${lm.title}`;
+  document.getElementById('deadlinePushContext').textContent = ctx;
+  document.getElementById('deadlinePushDate').value = '';
+  document.getElementById('deadlinePushReason').value = '';
+  document.getElementById('deadlinePushModal').style.display = 'flex';
+}
+
+function closeDeadlinePushModal() {
+  document.getElementById('deadlinePushModal').style.display = 'none';
+  pushRequestTaskId = null;
+  pushRequestLandmarkIndex = null;
+}
+
+async function submitDeadlinePushRequest() {
+  if (!pushRequestTaskId || pushRequestLandmarkIndex === null) return;
+  const newDateStr = document.getElementById('deadlinePushDate').value;
+  const reason = document.getElementById('deadlinePushReason').value.trim();
+  if (!newDateStr) { alert('Please select a new proposed deadline'); return; }
+  showLoading('Submitting deadline push...');
+  const task = tasks.find(t => t.id === pushRequestTaskId);
+  const lm = (task.landmarks || [])[pushRequestLandmarkIndex];
+  const recipient = currentUser === 'Nate' ? 'Craig' : 'Nate';
+  const req = await addDoc(deadlinePushCollection, {
+    taskId: pushRequestTaskId,
+    taskTitle: task.title,
+    landmarkIndex: pushRequestLandmarkIndex,
+    landmarkTitle: lm.title,
+    currentDueDate: lm.dueDate || null,
+    proposedDueDate: new Date(newDateStr).toISOString(),
+    reason,
+    requestedBy: currentUser,
+    recipient,
+    status: 'pending',
+    createdAt: new Date(),
+  });
+
+  try {
+    await addDoc(notificationsCollection, {
+      type: 'deadline_push_request',
+      taskId: pushRequestTaskId,
+      message: `${currentUser} requested to push a landmark deadline in "${task.title}"`,
+      createdAt: new Date(),
+      read: false,
+      recipient,
+      sender: currentUser,
+      requestId: req.id
+    });
+  } catch {}
+
+  closeDeadlinePushModal();
+  hideLoading();
+}
+
 // Needs Modal Logic
 // -----------------------------
 function openNeedsModal(id) {
@@ -1112,6 +1341,47 @@ function toggleCompletedBin() {
   }
 }
 
+// Permanently clear completed bin: remove completed memos and completed/fulfilled needs
+async function clearCompletedBin() {
+  if (!confirm('Permanently delete completed memos and needs? This cannot be undone.')) return;
+  showLoading('Clearing completed bin...');
+  try {
+    const updates = [];
+    for (const task of tasks) {
+      let changed = false;
+      const newTaskData = {};
+      // Clear completed memos: remove description, links, memo file, memoCompleted flag
+      if (task.memoCompleted && task.description) {
+        newTaskData.description = '';
+        newTaskData.memoLinks = [];
+        newTaskData.memoCompleted = false;
+        changed = true;
+        try { await deleteMemoFile(task); } catch (e) { console.warn('Memo file delete failed', e); }
+      }
+      // Remove completed/fulfilled needs
+      if (task.needs && Array.isArray(task.needs)) {
+        const remaining = task.needs.filter(n => {
+          const obj = typeof n === 'string' ? { text: n } : n;
+          return !obj.completed && !obj.fulfilled;
+        });
+        if (remaining.length !== task.needs.length) {
+          newTaskData.needs = remaining;
+          changed = true;
+        }
+      }
+      if (changed) {
+        updates.push(updateDoc(doc(db, 'tasks', task.id), newTaskData));
+      }
+    }
+    await Promise.all(updates);
+    alert('Completed bin cleared.');
+  } catch (e) {
+    console.error('Error clearing bin:', e);
+    alert('Failed to clear completed bin.');
+  }
+  hideLoading();
+}
+
 async function markNotificationRead(notificationId) {
   if (notificationId) {
     try {
@@ -1261,6 +1531,25 @@ function closeMessageModal() {
   document.getElementById("messageText").value = "";
   // Reset priority to normal
   document.getElementById("messagePriority").value = "normal";
+}
+
+// Permanently delete all messages for current user (sender or recipient)
+async function clearAllMessages() {
+  if (!confirm('Delete all your messages permanently? This cannot be undone.')) return;
+  showLoading('Clearing messages...');
+  try {
+    const sentQuery = query(messagesCollection, where('sender','==', currentUser));
+    const recvQuery = query(messagesCollection, where('recipient','==', currentUser));
+    const [sentSnap, recvSnap] = await Promise.all([getDocs(sentQuery), getDocs(recvQuery)]);
+    const ids = new Set();
+    sentSnap.forEach(d => ids.add(d.id));
+    recvSnap.forEach(d => ids.add(d.id));
+    await Promise.all(Array.from(ids).map(id => deleteDoc(doc(db, 'messages', id))));
+  } catch (e) {
+    console.error('Error clearing messages:', e);
+    alert('Failed to clear messages.');
+  }
+  hideLoading();
 }
 
 // Check for high-priority unshown messages
@@ -1486,27 +1775,46 @@ function renderTasks(tasksToRender) {
       ? `<input type="checkbox" checked disabled title="Task is pending review">`
       : `<input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleDone('${task.id}')">`;
 
+    // Landmarks summary
+    const landmarks = task.landmarks || [];
+    let landmarksSummary = '';
+    if (landmarks.length > 0) {
+      const pending = landmarks.filter(l => !l.completed);
+      const next = pending
+        .filter(l => l.dueDate)
+        .sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate))[0];
+      const nextText = next ? `Next: ${next.title} ${next.dueDate ? '(' + new Date(next.dueDate).toLocaleDateString() + ')' : ''}` : `${pending.length} pending`;
+      landmarksSummary = `<div class="landmarks-summary">🏁 Landmarks: ${pending.length}/${landmarks.length} pending • ${nextText}</div>`;
+    }
+
+    const urgentBadge = task.priorityFlagged ? '<span class="review-badge" style="background:#ef4444;">❗ Urgent</span>' : '';
+
     div.innerHTML = `
       <div class="task-header">
         <div>
           <strong>${task.title}</strong>
           <span class="priority-badge ${priority}">${priorityEmoji} ${priorityLabel}</span>
           ${deadlineHTML}
+          ${urgentBadge}
           ${needsReviewBadge}
           ${pendingReviewBadge}
         </div>
         ${checkboxHTML}
       </div>
+      ${landmarksSummary}
       ${flaggedHTML}
       ${updateHistoryHTML}
       ${attachmentsHTML}
       ${fileHTML}
       <div class="task-actions">
         <button onclick="openUpdateModal('${task.id}')">+ Add Update</button>
-        <button onclick="openMemoModal('${task.id}')">📝 ${task.description ? 'Edit' : 'Add'} Memo</button>
-        <button onclick="openNeedsModal('${task.id}')">📌 Edit Needs</button>
+        <button onclick="openMemoModal('${task.id}')">📝 ${task.description ? 'Edit' : 'Create'} Memo</button>
+        <button onclick="openNeedsModal('${task.id}')">📌 ${ (task.needs && task.needs.length>0) ? 'Edit' : 'Create' } Needs</button>
+        <button onclick="openLandmarksModal('${task.id}')">🏁 Edit Landmarks</button>
         <button onclick="openAttachmentModal('${task.id}')">🔗 Add Link</button>
         <button class="priority-change-btn" onclick="changeTaskPriority('${task.id}')">🚩 Change Task Priority</button>
+        <button class="priority-change-btn" onclick="openDeadlineEditModal('${task.id}')">⏰ Set Deadline</button>
+        <button class="priority-change-btn" onclick="togglePriorityFlag('${task.id}')">❗ Urgent Flag</button>
       </div>
     `;
     container.appendChild(div);
@@ -1867,6 +2175,63 @@ async function saveFulfillNeed() {
   }
   
   closeFulfillNeedModal();
+  hideLoading();
+}
+
+// Approve/Decline deadline push
+async function approveDeadlinePush(requestId) {
+  showLoading('Approving deadline push...');
+  try {
+    const reqDoc = doc(db, 'deadlinePushRequests', requestId);
+    const reqSnap = await getDoc(reqDoc);
+    const req = reqSnap.exists() ? reqSnap.data() : null;
+    if (!req) { hideLoading(); return; }
+    // Update task landmark due date
+    const task = tasks.find(t => t.id === req.taskId);
+    const lm = (task.landmarks || [])[req.landmarkIndex];
+    if (lm) {
+      lm.dueDate = req.proposedDueDate;
+      const taskRef = doc(db, 'tasks', req.taskId);
+      await updateDoc(taskRef, { landmarks: task.landmarks });
+    }
+    // Update request status
+    await updateDoc(reqDoc, { status: 'approved', decidedBy: currentUser, decidedAt: new Date() });
+    // Notify requester
+    await addDoc(notificationsCollection, {
+      type: 'deadline_push_decision',
+      taskId: req.taskId,
+      message: `${currentUser} approved your deadline push for "${req.landmarkTitle}" in "${req.taskTitle}"`,
+      createdAt: new Date(),
+      read: false,
+      recipient: req.requestedBy,
+      sender: currentUser,
+    });
+  } catch (e) {
+    console.error(e);
+  }
+  hideLoading();
+}
+
+async function declineDeadlinePush(requestId) {
+  showLoading('Declining deadline push...');
+  try {
+    const reqDoc = doc(db, 'deadlinePushRequests', requestId);
+    const reqSnap = await getDoc(reqDoc);
+    const req = reqSnap.exists() ? reqSnap.data() : null;
+    if (!req) { hideLoading(); return; }
+    await updateDoc(reqDoc, { status: 'declined', decidedBy: currentUser, decidedAt: new Date() });
+    await addDoc(notificationsCollection, {
+      type: 'deadline_push_decision',
+      taskId: req.taskId,
+      message: `${currentUser} declined your deadline push for "${req.landmarkTitle}" in "${req.taskTitle}"`,
+      createdAt: new Date(),
+      read: false,
+      recipient: req.requestedBy,
+      sender: currentUser,
+    });
+  } catch (e) {
+    console.error(e);
+  }
   hideLoading();
 }
 
@@ -2608,6 +2973,17 @@ function initializeApp() {
     // Update UI
     const allNotifications = snapshot.docs;
     
+
+        // Listen for deadline push requests assigned to current user
+        const dprQuery = query(
+          deadlinePushCollection,
+          where('recipient', '==', currentUser),
+          where('status', '==', 'pending')
+        );
+        onSnapshot(dprQuery, (snapshot) => {
+          deadlinePushRequests = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          renderDeadlinePushRequests();
+        });
     // Separate read and unread
     const unreadDocs = allNotifications.filter(doc => !doc.data().read);
     const readDocs = allNotifications.filter(doc => doc.data().read);
@@ -3035,9 +3411,123 @@ function renderReview(tasksToRender) {
   
   if (reviewTasks.length === 0) {
     container.innerHTML = "<p class='no-reviews'>No tasks pending review.</p>";
+  } else {
+    container.innerHTML = reviewTasks.map(task => {
+      const submission = task.reviewSubmission || {};
+      const submittedDate = submission.submittedAt?.seconds 
+        ? new Date(submission.submittedAt.seconds * 1000).toLocaleString()
+        : 'Unknown date';
+      const isFlagged = task.status === 'needs-review';
+      const statusLabel = isFlagged ? 'Needs Changes' : 'Pending Review';
+      const statusClass = isFlagged ? 'needs-changes-status' : 'review-status';
+      let feedbackHTML = '';
+      if (isFlagged && task.reviewFeedback) {
+        feedbackHTML = `
+        <div class="review-feedback-section">
+          <h4>🚩 Reviewer Feedback:</h4>
+          <p class="feedback-text">${task.reviewFeedback}</p>
+          <p class="feedback-meta">From ${task.reviewedBy} on ${task.reviewedAt?.seconds ? new Date(task.reviewedAt.seconds * 1000).toLocaleString() : 'Unknown date'}</p>
+        </div>`;
+      }
+      let taskFileHTML = '';
+      if (task.attachedFile) {
+        taskFileHTML = `<div class="review-files"><h4>📎 Original Task File:</h4>
+        <div class="task-file-attachment">
+          <div class="file-icon">${getFileIcon(task.attachedFile.type)}</div>
+          <div class="file-info-compact">
+            <div class="file-name-small">${task.attachedFile.name}</div>
+            <div class="file-size-small">${(task.attachedFile.size / 1024).toFixed(2)} KB</div>
+          </div>
+          <a href="${task.attachedFile.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+        </div></div>`;
+      }
+      let filesHTML = '';
+      if (submission.files && submission.files.length > 0) {
+        filesHTML = '<div class="review-files"><h4>📎 Additional Review Files:</h4>' +
+          submission.files.map(file => `
+          <div class="task-file-attachment">
+            <div class="file-icon">${getFileIcon(file.type)}</div>
+            <div class="file-info-compact">
+              <div class="file-name-small">${file.name}</div>
+              <div class="file-size-small">${(file.size / 1024).toFixed(2)} KB</div>
+            </div>
+            <a href="${file.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
+          </div>`).join('') + '</div>';
+      }
+      let imageHTML = '';
+      if (submission.imageUrl) {
+        imageHTML = `<div class="review-image"><h4>📸 Image:</h4><img src="${submission.imageUrl}" alt="Completion image" style="max-width: 100%; border-radius: 8px; margin-top: 8px;" /></div>`;
+      }
+      let linksHTML = '';
+      if (submission.links && submission.links.length > 0) {
+        linksHTML = '<div class="review-links"><h4>🔗 Links:</h4>' +
+          submission.links.map(link => `
+          <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="review-link">🔗 ${link.text}</a>`).join('') + '</div>';
+      }
+      return `
+      <div class="review-card ${isFlagged ? 'flagged' : ''}">
+        <div class="review-header">
+          <h3>${task.title}</h3>
+          <span class="${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="review-meta">
+          <span>Submitted by ${submission.submittedBy || 'Unknown'}</span>
+          <span>${submittedDate}</span>
+        </div>
+        ${feedbackHTML}
+        <div class="review-notes">
+          <h4>📝 Completion Summary:</h4>
+          <p>${submission.notes || 'No notes provided'}</p>
+        </div>
+        ${taskFileHTML}
+        ${filesHTML}
+        ${imageHTML}
+        ${linksHTML}
+        <div class="review-actions">
+          ${currentUser === 'Craig' ? `
+            <button class="approve-btn" onclick="openReviewFeedbackModal('${task.id}', 'approve')">✅ Verify as Complete</button>
+            <button class="reject-btn" onclick="openReviewFeedbackModal('${task.id}', 'reject')">🚩 Flag for Review</button>
+          ` : `
+            <button class="submit-btn" onclick="openCompletionModal('${task.id}')">📝 Resubmit for Review</button>
+          `}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Also render deadline push requests
+  renderDeadlinePushRequests();
+  
+
+function renderDeadlinePushRequests() {
+  const container = document.getElementById('deadlinePushList');
+  if (!container) return;
+  if (!deadlinePushRequests || deadlinePushRequests.length === 0) {
+    container.innerHTML = "<p class='no-reviews'>No deadline push requests.</p>";
     return;
   }
-  
+  container.innerHTML = deadlinePushRequests.map(req => {
+    const current = req.currentDueDate ? new Date(req.currentDueDate).toLocaleDateString() : 'No due date';
+    const proposed = req.proposedDueDate ? new Date(req.proposedDueDate).toLocaleDateString() : '';
+    return `
+      <div class="review-card">
+        <div class="review-header">
+          <h3>${req.taskTitle} → ${req.landmarkTitle}</h3>
+          <span class="review-status">Deadline Push</span>
+        </div>
+        <div class="review-notes">
+          <p><strong>Current:</strong> ${current}</p>
+          <p><strong>Proposed:</strong> ${proposed}</p>
+          <p><strong>Reason:</strong> ${req.reason || 'None provided'}</p>
+          <p><strong>Requested by:</strong> ${req.requestedBy}</p>
+        </div>
+        <div class="review-actions">
+          <button class="approve-btn" onclick="approveDeadlinePush('${req.id}')">Approve</button>
+          <button class="reject-btn" onclick="declineDeadlinePush('${req.id}')">Decline</button>
+        </div>
+      </div>`;
+  }).join('');
+}
   container.innerHTML = reviewTasks.map(task => {
     const submission = task.reviewSubmission || {};
     const submittedDate = submission.submittedAt?.seconds 

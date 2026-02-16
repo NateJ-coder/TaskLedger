@@ -93,7 +93,10 @@
     <aside class="completed-bin-panel" id="completedBinPanel" role="complementary" aria-label="Completed Items">
       <div class="bin-header">
         <h3>📦 Completed Items</h3>
-        <button class="close-bin" onclick="toggleCompletedBin()" aria-label="Close completed bin">✕</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="close-bin" onclick="toggleCompletedBin()" aria-label="Close completed bin">✕</button>
+          <button class="restore-btn" onclick="clearCompletedBin()" title="Permanently delete completed items">🗑️ Clear Bin</button>
+        </div>
       </div>
       <div class="bin-body">
         <div class="bin-section">
@@ -133,6 +136,9 @@
         <h1>Tasks Pending Review</h1>
         <p class="view-description">Review completed work and approve or request changes</p>
         <section id="reviewList"></section>
+        <h2 style="margin-top:24px;">Deadline Push Requests</h2>
+        <p class="view-description">Approve or decline requested deadline changes for task landmarks</p>
+        <section id="deadlinePushList"></section>
       </div>
       <div id="completed-view" class="view">
         <h1>Completed Tasks</h1>
@@ -281,6 +287,20 @@
     </div>
   </div>
 
+  <!-- Task Deadline Edit Modal -->
+  <div id="deadlineEditModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Set Task Deadline</h2>
+      <p id="deadlineEditTaskTitle"></p>
+      <label for="deadlineEditDate" style="display:block; margin-bottom:6px; font-weight:600;">Deadline:</label>
+      <input id="deadlineEditDate" type="date" />
+      <div class="modal-actions">
+        <button onclick="saveTaskDeadline()">Save Deadline</button>
+        <button class="secondary" onclick="closeDeadlineEditModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="memoModal" class="modal-overlay">
     <div class="modal-content">
       <h2>Edit Memo</h2>
@@ -318,6 +338,44 @@
       <div class="modal-actions">
         <button onclick="saveMemo()">Save Memo</button>
         <button class="secondary" onclick="closeMemoModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Landmarks Modal -->
+  <div id="landmarksModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Edit Landmarks</h2>
+      <p id="landmarksTaskTitle"></p>
+      <div class="needs-help-box">
+        <p class="needs-help-text">💡 <strong>How to add landmarks:</strong></p>
+        <ul class="needs-help-list">
+          <li>Enter each landmark on a new line</li>
+          <li>Optional tags: [high|medium|low], [due:YYYY-MM-DD]</li>
+          <li>Example: Build staff hub [high] [due:2026-02-10]</li>
+        </ul>
+      </div>
+      <textarea id="landmarksText" placeholder="One landmark per line..." style="min-height: 120px;"></textarea>
+      <div id="landmarksExistingList"></div>
+      <div class="modal-actions">
+        <button onclick="saveLandmarks()">Save Landmarks</button>
+        <button class="secondary" onclick="closeLandmarksModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deadline Push Request Modal -->
+  <div id="deadlinePushModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Request Deadline Push</h2>
+      <p id="deadlinePushContext"></p>
+      <label for="deadlinePushDate">New proposed deadline:</label>
+      <input id="deadlinePushDate" type="date" />
+      <label for="deadlinePushReason" style="display:block; margin-top:8px;">Reason:</label>
+      <textarea id="deadlinePushReason" placeholder="Brief reason for the push..." rows="4"></textarea>
+      <div class="modal-actions">
+        <button onclick="submitDeadlinePushRequest()">Submit Request</button>
+        <button class="secondary" onclick="closeDeadlinePushModal()">Cancel</button>
       </div>
     </div>
   </div>
@@ -386,6 +444,7 @@
       <textarea id="messageText" placeholder="Type your message here..." rows="6"></textarea>
       <div class="modal-actions">
         <button onclick="sendMessage()">Send Message</button>
+        <button class="secondary" onclick="clearAllMessages()" title="Delete all your messages">Clear All Messages</button>
         <button class="secondary" onclick="closeMessageModal()">Cancel</button>
       </div>
     </div>
