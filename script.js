@@ -82,6 +82,9 @@ window.sendChatMessage = sendChatMessage;
 window.handleChatKeydown = handleChatKeydown;
 window.filterCompletedNeeds = filterCompletedNeeds;
 window.switchResourceTab = switchResourceTab;
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.formatTaskLedger = formatTaskLedger;
 // Expose clear functions and deadline/priority
 window.clearAllMessages = clearAllMessages;
 window.clearCompletedBin = clearCompletedBin;
@@ -383,6 +386,160 @@ function closeAddTaskModal() {
   document.getElementById("taskNeeds").value = "";
   document.getElementById("taskPriority").value = "medium";
   document.getElementById("taskDeadline").value = "none";
+}
+
+function openSettingsModal() {
+  const modal = document.getElementById("settingsModal");
+  const input = document.getElementById("formatConfirmInput");
+  if (!modal || !input) return;
+  input.value = "";
+  modal.style.display = "flex";
+  input.focus();
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById("settingsModal");
+  const input = document.getElementById("formatConfirmInput");
+  if (modal) modal.style.display = "none";
+  if (input) input.value = "";
+}
+
+function collectTaskStoragePaths(task) {
+  const paths = [];
+
+  if (task?.attachedFile?.path) paths.push(task.attachedFile.path);
+  if (task?.memoFile?.path) paths.push(task.memoFile.path);
+
+  if (task?.reviewSubmission?.files && Array.isArray(task.reviewSubmission.files)) {
+    task.reviewSubmission.files.forEach(file => {
+      if (file?.path) paths.push(file.path);
+    });
+  }
+
+  if (task?.needs && Array.isArray(task.needs)) {
+    task.needs.forEach(need => {
+      const needObj = typeof need === 'string' ? null : need;
+      if (needObj?.attachedFile?.path) paths.push(needObj.attachedFile.path);
+      if (needObj?.fulfillmentFiles && Array.isArray(needObj.fulfillmentFiles)) {
+        needObj.fulfillmentFiles.forEach(file => {
+          if (file?.path) paths.push(file.path);
+        });
+      }
+    });
+  }
+
+  return [...new Set(paths)];
+}
+
+async function deleteCollectionDocs(collectionName) {
+  const snapshot = await getDocs(collection(db, collectionName));
+  if (snapshot.empty) return 0;
+  await Promise.all(snapshot.docs.map(entry => deleteDoc(entry.ref)));
+  return snapshot.size;
+}
+
+async function clearBrowserDataPreserveSession() {
+  const savedUser = localStorage.getItem("taskledger_user");
+  const savedApiKey = localStorage.getItem("GEMINI_API_KEY");
+
+  sessionStorage.clear();
+  localStorage.clear();
+
+  if (savedUser) localStorage.setItem("taskledger_user", savedUser);
+  if (savedApiKey) localStorage.setItem("GEMINI_API_KEY", savedApiKey);
+
+  if ("caches" in window) {
+    const cacheKeys = await caches.keys();
+    await Promise.all(cacheKeys.map(cacheKey => caches.delete(cacheKey)));
+  }
+
+  if ("serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(registration => registration.unregister()));
+    try {
+      await navigator.serviceWorker.register("./service-worker.js");
+    } catch (error) {
+      console.warn("Service worker re-registration failed:", error);
+    }
+  }
+}
+
+async function formatTaskLedger() {
+  const confirmationInput = document.getElementById("formatConfirmInput");
+  const formatBtn = document.getElementById("formatAppBtn");
+  const cancelBtn = document.getElementById("cancelFormatBtn");
+
+  if (!confirmationInput || !formatBtn || !cancelBtn) return;
+
+  if (confirmationInput.value.trim().toUpperCase() !== "FORMAT") {
+    alert('Please type FORMAT to confirm.');
+    return;
+  }
+
+  const confirmed = confirm(
+    "This will permanently delete tasks, resources, notifications, messages, chat history, and cached app data. Knowledge base entries will be preserved. Continue?"
+  );
+  if (!confirmed) return;
+
+  formatBtn.disabled = true;
+  cancelBtn.disabled = true;
+  showLoading('Formatting TaskLedger...');
+
+  try {
+    await extractAndSaveKnowledge();
+    await loadKnowledgeBase();
+
+    const allTasksSnapshot = await getDocs(tasksCollection);
+    const taskFileDeletePromises = [];
+    const taskDocDeletePromises = [];
+
+    allTasksSnapshot.forEach(taskEntry => {
+      const taskData = { id: taskEntry.id, ...taskEntry.data() };
+      collectTaskStoragePaths(taskData).forEach(path => {
+        taskFileDeletePromises.push(deleteFileFromStorage(path));
+      });
+      taskDocDeletePromises.push(deleteDoc(taskEntry.ref));
+    });
+
+    await Promise.all(taskFileDeletePromises);
+    await Promise.all(taskDocDeletePromises);
+
+    const allResourcesSnapshot = await getDocs(filesCollection);
+    const resourceFileDeletePromises = [];
+    const resourceDocDeletePromises = [];
+
+    allResourcesSnapshot.forEach(resourceEntry => {
+      const resource = resourceEntry.data();
+      if (resource.resourceType !== 'link' && resource.path) {
+        resourceFileDeletePromises.push(deleteFileFromStorage(resource.path));
+      }
+      resourceDocDeletePromises.push(deleteDoc(resourceEntry.ref));
+    });
+
+    await Promise.all(resourceFileDeletePromises);
+    await Promise.all(resourceDocDeletePromises);
+
+    await Promise.all([
+      deleteCollectionDocs("notifications"),
+      deleteCollectionDocs("messages"),
+      deleteCollectionDocs("deadlinePushRequests"),
+      deleteCollectionDocs("chatHistory")
+    ]);
+
+    await clearBrowserDataPreserveSession();
+    await loadKnowledgeBase();
+
+    closeSettingsModal();
+    alert(`TaskLedger formatted successfully. Knowledge base preserved (${knowledgeBase.length} entries).`);
+    window.location.reload();
+  } catch (error) {
+    console.error('Error formatting app:', error);
+    alert('Failed to format TaskLedger. Check console for details.');
+  } finally {
+    hideLoading();
+    formatBtn.disabled = false;
+    cancelBtn.disabled = false;
+  }
 }
 
 // Handle priority change to auto-set deadline

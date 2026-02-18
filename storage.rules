@@ -18,6 +18,10 @@ service firebase.storage {
       allow read, write: if isSignedIn();
     }
 
+    match /need-fulfillment/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
     // Review submission uploads
     match /review-submissions/{allPaths=**} {
       allow read, write: if isSignedIn();

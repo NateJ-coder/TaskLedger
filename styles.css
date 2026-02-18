@@ -268,6 +268,7 @@ body {
 }
 
 .message-btn,
+.settings-btn,
 .logout-btn {
   width: 100%;
   background: transparent;
@@ -283,11 +284,13 @@ body {
 }
 
 .message-btn:hover,
+.settings-btn:hover,
 .logout-btn:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
 .message-btn .nav-text,
+.settings-btn .nav-text,
 .logout-btn .nav-text {
   margin-left: 12px;
   opacity: 0;
@@ -296,6 +299,7 @@ body {
 }
 
 .sidebar:hover .message-btn .nav-text,
+.sidebar:hover .settings-btn .nav-text,
 .sidebar:hover .logout-btn .nav-text {
   opacity: 1;
 }
@@ -1416,6 +1420,20 @@ h1 {
 .modal-actions button.secondary {
   background: var(--border);
   color: var(--text);
+}
+
+.modal-actions button.danger {
+  background: var(--text);
+}
+
+.modal-actions button.danger:hover {
+  background: var(--sidebar-bg);
+}
+
+.settings-warning-text {
+  color: var(--text);
+  font-weight: 600;
+  margin: 0 0 12px;
 }
 
 /* ---------- Completed Task Item ---------- */

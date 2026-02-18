@@ -63,6 +63,10 @@
           <span class="nav-icon">💬</span>
           <span class="nav-text">Send Message</span>
         </button>
+        <button class="settings-btn" onclick="openSettingsModal()">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Settings</span>
+        </button>
         <button class="logout-btn" onclick="logout()">
           <span class="nav-icon">👤</span>
           <span class="nav-text" id="currentUserName">User</span>
@@ -554,6 +558,24 @@
       <div class="modal-actions">
         <button onclick="uploadPermanentFile()">Save Resource</button>
         <button class="secondary" onclick="closeFileUploadModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>App Settings</h2>
+      <p style="color: var(--muted); margin-bottom: 10px;">
+        Format app: delete tasks and app data, clear browser cache, and reset TaskLedger.
+      </p>
+      <p class="settings-warning-text">
+        Knowledge base entries are preserved and refreshed before reset.
+      </p>
+      <label for="formatConfirmInput" style="display:block; margin-bottom: 8px; font-weight: 600;">Type FORMAT to confirm:</label>
+      <input id="formatConfirmInput" placeholder="FORMAT" autocomplete="off" />
+      <div class="modal-actions" style="margin-top: 16px;">
+        <button id="formatAppBtn" class="danger" onclick="formatTaskLedger()">Format App</button>
+        <button id="cancelFormatBtn" class="secondary" onclick="closeSettingsModal()">Cancel</button>
       </div>
     </div>
   </div>
