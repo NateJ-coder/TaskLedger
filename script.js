@@ -3688,7 +3688,7 @@ function renderReview(tasksToRender) {
 
   // Also render deadline push requests
   renderDeadlinePushRequests();
-  
+}
 
 function renderDeadlinePushRequests() {
   const container = document.getElementById('deadlinePushList');
@@ -3697,6 +3697,7 @@ function renderDeadlinePushRequests() {
     container.innerHTML = "<p class='no-reviews'>No deadline push requests.</p>";
     return;
   }
+
   container.innerHTML = deadlinePushRequests.map(req => {
     const current = req.currentDueDate ? new Date(req.currentDueDate).toLocaleDateString() : 'No due date';
     const proposed = req.proposedDueDate ? new Date(req.proposedDueDate).toLocaleDateString() : '';
@@ -3717,109 +3718,6 @@ function renderDeadlinePushRequests() {
           <button class="reject-btn" onclick="declineDeadlinePush('${req.id}')">Decline</button>
         </div>
       </div>`;
-  }).join('');
-}
-  container.innerHTML = reviewTasks.map(task => {
-    const submission = task.reviewSubmission || {};
-    const submittedDate = submission.submittedAt?.seconds 
-      ? new Date(submission.submittedAt.seconds * 1000).toLocaleString()
-      : 'Unknown date';
-    
-    // Check if this task was flagged for review
-    const isFlagged = task.status === 'needs-review';
-    const statusLabel = isFlagged ? 'Needs Changes' : 'Pending Review';
-    const statusClass = isFlagged ? 'needs-changes-status' : 'review-status';
-    
-    let feedbackHTML = '';
-    if (isFlagged && task.reviewFeedback) {
-      feedbackHTML = `
-        <div class="review-feedback-section">
-          <h4>🚩 Reviewer Feedback:</h4>
-          <p class="feedback-text">${task.reviewFeedback}</p>
-          <p class="feedback-meta">From ${task.reviewedBy} on ${task.reviewedAt?.seconds ? new Date(task.reviewedAt.seconds * 1000).toLocaleString() : 'Unknown date'}</p>
-        </div>
-      `;
-    }
-    
-    // Show original task attachment if present
-    let taskFileHTML = '';
-    if (task.attachedFile) {
-      taskFileHTML = `<div class="review-files"><h4>📎 Original Task File:</h4>
-        <div class="task-file-attachment">
-          <div class="file-icon">${getFileIcon(task.attachedFile.type)}</div>
-          <div class="file-info-compact">
-            <div class="file-name-small">${task.attachedFile.name}</div>
-            <div class="file-size-small">${(task.attachedFile.size / 1024).toFixed(2)} KB</div>
-          </div>
-          <a href="${task.attachedFile.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
-        </div>
-      </div>`;
-    }
-    
-    // Show review submission files if present
-    let filesHTML = '';
-    if (submission.files && submission.files.length > 0) {
-      filesHTML = '<div class="review-files"><h4>📎 Additional Review Files:</h4>' +
-        submission.files.map(file => `
-          <div class="task-file-attachment">
-            <div class="file-icon">${getFileIcon(file.type)}</div>
-            <div class="file-info-compact">
-              <div class="file-name-small">${file.name}</div>
-              <div class="file-size-small">${(file.size / 1024).toFixed(2)} KB</div>
-            </div>
-            <a href="${file.url}" target="_blank" class="file-download-small" title="Download">⬇️</a>
-          </div>
-        `).join('') + '</div>';
-    }
-    
-    let imageHTML = '';
-    if (submission.imageUrl) {
-      imageHTML = `<div class="review-image"><h4>📸 Image:</h4><img src="${submission.imageUrl}" alt="Completion image" style="max-width: 100%; border-radius: 8px; margin-top: 8px;" /></div>`;
-    }
-    
-    let linksHTML = '';
-    if (submission.links && submission.links.length > 0) {
-      linksHTML = '<div class="review-links"><h4>🔗 Links:</h4>' +
-        submission.links.map(link => `
-          <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="review-link">🔗 ${link.text}</a>
-        `).join('') + '</div>';
-    }
-    
-    return `
-      <div class="review-card ${isFlagged ? 'flagged' : ''}">
-        <div class="review-header">
-          <h3>${task.title}</h3>
-          <span class="${statusClass}">${statusLabel}</span>
-        </div>
-        <div class="review-meta">
-          <span>Submitted by ${submission.submittedBy || 'Unknown'}</span>
-          <span>${submittedDate}</span>
-        </div>
-        ${feedbackHTML}
-        <div class="review-notes">
-          <h4>📝 Completion Summary:</h4>
-          <p>${submission.notes || 'No notes provided'}</p>
-        </div>
-        ${taskFileHTML}
-        ${filesHTML}
-        ${imageHTML}
-        ${linksHTML}
-        <div class="review-actions">
-          ${currentUser === 'Craig' ? `
-            <button class="approve-btn" onclick="openReviewFeedbackModal('${task.id}', 'approve')">
-              ✅ Verify as Complete
-            </button>
-            <button class="reject-btn" onclick="openReviewFeedbackModal('${task.id}', 'reject')">
-              🚩 Flag for Review
-            </button>
-          ` : `
-            <button class="submit-btn" onclick="openCompletionModal('${task.id}')">
-              📝 Resubmit for Review
-            </button>
-          `}
-        </div>
-      </div>
-    `;
   }).join('');
 }
 
@@ -4424,7 +4322,7 @@ async function extractAndSaveKnowledge() {
           title: task.title,
           content: task.description || task.title,
           taskId: task.id,
-          createdBy: task.createdBy,
+          createdBy: task.createdBy || null,
           tags: keywords.filter(k => description.includes(k) || title.includes(k))
         });
       }
@@ -4440,7 +4338,7 @@ async function extractAndSaveKnowledge() {
               title: `Update: ${task.title}`,
               content: update.text,
               taskId: task.id,
-              createdBy: update.author,
+              createdBy: update.author || null,
               tags: keywords.filter(k => updateText.includes(k))
             });
           }
