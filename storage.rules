@@ -5,26 +5,31 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function ownsTask(taskId) {
+      return isSignedIn()
+        && firestore.get(/databases/(default)/documents/tasks/$(taskId)).data.ownerUid == request.auth.uid;
+    }
+
     // Task files, memo files, need files
-    match /tasks/{allPaths=**} {
-      allow read, write: if isSignedIn();
+    match /tasks/{taskId}/{allPaths=**} {
+      allow read, write: if ownsTask(taskId);
     }
 
-    match /memos/{allPaths=**} {
-      allow read, write: if isSignedIn();
+    match /memos/{taskId}/{allPaths=**} {
+      allow read, write: if ownsTask(taskId);
     }
 
-    match /needs/{allPaths=**} {
-      allow read, write: if isSignedIn();
+    match /needs/{taskId}/{allPaths=**} {
+      allow read, write: if ownsTask(taskId);
     }
 
-    match /need-fulfillment/{allPaths=**} {
-      allow read, write: if isSignedIn();
+    match /need-fulfillment/{taskId}/{allPaths=**} {
+      allow read, write: if ownsTask(taskId);
     }
 
     // Review submission uploads
-    match /review-submissions/{allPaths=**} {
-      allow read, write: if isSignedIn();
+    match /review-submissions/{taskId}/{allPaths=**} {
+      allow read, write: if ownsTask(taskId);
     }
 
     // Permanent resources

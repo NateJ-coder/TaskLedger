@@ -59,6 +59,10 @@
         </a></li>
       </ul>
       <div class="sidebar-footer">
+        <button class="meeting-btn" onclick="openMeetingTranscriptModal()">
+          <span class="nav-icon">🎙️</span>
+          <span class="nav-text">Meeting Transcript</span>
+        </button>
         <button class="message-btn" onclick="openMessageModal()">
           <span class="nav-icon">💬</span>
           <span class="nav-text">Send Message</span>
@@ -580,6 +584,119 @@
     </div>
   </div>
 
+  <!-- Meeting Transcript Modal -->
+  <div id="meetingTranscriptModal" class="modal-overlay">
+    <div class="modal-content meeting-modal-wide">
+      <h2>🎙️ Meeting Transcript</h2>
+      <p style="color: var(--muted); margin-bottom: 16px;">
+        Paste your meeting transcript below, and AI will extract action items and create tasks automatically.
+      </p>
+      
+      <div class="transcript-tabs">
+        <button class="transcript-tab active" onclick="switchTranscriptTab('paste')">📝 Paste Transcript</button>
+        <button class="transcript-tab" onclick="switchTranscriptTab('record')">🎤 Record Meeting</button>
+        <button class="transcript-tab" onclick="switchTranscriptTab('guide')">📖 Meeting Bot Guide</button>
+      </div>
+      
+      <div id="pasteTranscriptSection" class="transcript-section">
+        <label for="meetingTranscript" style="display:block; margin-bottom: 8px; font-weight: 600;">Meeting Transcript:</label>
+        <textarea id="meetingTranscript" placeholder="Paste your meeting transcript here...
+
+Example:
+[00:00] Craig: We need to finalize the Q3 report by Friday.
+[00:15] Nate: I'll handle the data analysis section. Should be done by Wednesday.
+[00:30] Craig: Great! I'll review it Thursday and submit Friday morning.
+[00:45] Nate: We also need to schedule a client call for next week." rows="12" style="font-family: 'Courier New', monospace; font-size: 0.9rem;"></textarea>
+        
+        <div style="margin-top: 16px;">
+          <label style="display:block; margin-bottom: 8px; font-weight: 600;">Meeting Details (Optional):</label>
+          <input id="meetingTitle" type="text" placeholder="Meeting title (e.g., Q3 Planning Meeting)" style="margin-bottom: 8px;" />
+          <input id="meetingDate" type="date" placeholder="Meeting date" />
+        </div>
+      </div>
+      
+      <div id="recordTranscriptSection" class="transcript-section" style="display:none;">
+        <div class="recording-controls">
+          <p style="color: var(--muted); margin-bottom: 16px;">
+            🎤 Record your meeting audio directly in the browser. The AI will transcribe and extract tasks.
+          </p>
+          <button id="startRecordingBtn" class="record-btn" onclick="startMeetingRecording()">
+            <span>⏺️ Start Recording</span>
+          </button>
+          <button id="stopRecordingBtn" class="record-btn stop-btn" onclick="stopMeetingRecording()" style="display:none;">
+            <span>⏹️ Stop Recording</span>
+          </button>
+          <div id="recordingStatus" class="recording-status" style="display:none;">
+            <span class="recording-indicator">●</span>
+            <span id="recordingTime">00:00</span>
+          </div>
+          <div id="recordingPreview" class="recording-preview" style="display:none;">
+            <audio id="recordingAudio" controls></audio>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-top: 8px;">
+              Note: Browser recording is currently manual transcription only. For automatic transcription, use a meeting bot service (see Guide tab).
+            </p>
+          </div>
+        </div>
+      </div>
+      
+      <div id="guideTranscriptSection" class="transcript-section" style="display:none;">
+        <h3 style="margin-top: 0;">🤖 Using Meeting Bot Services</h3>
+        <p style="color: var(--muted); margin-bottom: 16px;">
+          Meeting bots can automatically join your video calls, record, and transcribe them. Here are the best options:
+        </p>
+        
+        <div class="meeting-bot-guide">
+          <div class="bot-service">
+            <h4>🔥 Fireflies.ai (Recommended)</h4>
+            <ul>
+              <li><strong>Setup:</strong> Create account at <a href="https://fireflies.ai" target="_blank">fireflies.ai</a></li>
+              <li><strong>Integration:</strong> Connect to Zoom, Google Meet, Teams, or invite Fred@fireflies.ai to meetings</li>
+              <li><strong>After Meeting:</strong> Copy transcript from Fireflies dashboard and paste above</li>
+              <li><strong>Cost:</strong> Free tier available, Pro at $10/month</li>
+            </ul>
+          </div>
+          
+          <div class="bot-service">
+            <h4>🦦 Otter.ai</h4>
+            <ul>
+              <li><strong>Setup:</strong> Sign up at <a href="https://otter.ai" target="_blank">otter.ai</a></li>
+              <li><strong>Integration:</strong> Browser extension or mobile app for recording</li>
+              <li><strong>After Meeting:</strong> Export transcript and paste above</li>
+              <li><strong>Cost:</strong> Free tier: 300 min/month, Pro at $8.33/month</li>
+            </ul>
+          </div>
+          
+          <div class="bot-service">
+            <h4>🎯 Fathom</h4>
+            <ul>
+              <li><strong>Setup:</strong> Install from <a href="https://fathom.video" target="_blank">fathom.video</a></li>
+              <li><strong>Integration:</strong> Chrome extension for Zoom/Meet/Teams</li>
+              <li><strong>After Meeting:</strong> Copy transcript and paste above</li>
+              <li><strong>Cost:</strong> Free for unlimited meetings</li>
+            </ul>
+          </div>
+          
+          <div class="quick-start-box">
+            <h4>⚡ Quick Start</h4>
+            <ol>
+              <li>Sign up for any service above (Fathom is free and easy)</li>
+              <li>Connect it to your meeting platform (Zoom, Meet, etc.)</li>
+              <li>Let it join and record your meetings automatically</li>
+              <li>After the meeting, copy the transcript</li>
+              <li>Paste it in the "Paste Transcript" tab</li>
+              <li>Click "Process Transcript" to extract tasks!</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button onclick="processMeetingTranscript()">🚀 Process Transcript</button>
+        <button class="secondary" onclick="closeMeetingTranscriptModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- AI Chat Button -->
   <button class="chat-bot-button" id="chatBotButton" onclick="toggleChatBot()" title="Ask AI Assistant">
     <span class="chat-icon">🤖</span>
@@ -598,7 +715,14 @@
       <div class="chat-bot-messages" id="chatBotMessages">
         <div class="chat-message assistant">
           <div class="message-bubble">
-            👋 Hi! I'm your AI assistant. I can help you with questions about TaskLedger, retrieve information, or assist with anything else. Just ask!
+            👋 Hi! I'm your TaskLedger AI assistant. I can:
+            
+            ✅ Create tasks automatically (e.g., "I need to finish the report urgently!")
+            📝 Transcribe meeting notes into tasks (e.g., "Meeting notes: Craig needs to...")
+            🔍 Answer questions about your tasks and data
+            💡 Retrieve information from your knowledge base
+            
+            Just tell me what you need!
           </div>
         </div>
       </div>

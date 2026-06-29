@@ -1,4 +1,4 @@
-import { db, storage, ensureFirebaseSession } from "./firebase-config.js";
+import { db, storage, auth, ensureFirebaseSession } from "./firebase-config.js";
 import { config } from "./config.js";
 import {
   collection,
@@ -101,6 +101,13 @@ window.closeDeadlinePushModal = closeDeadlinePushModal;
 window.submitDeadlinePushRequest = submitDeadlinePushRequest;
 window.approveDeadlinePush = approveDeadlinePush;
 window.declineDeadlinePush = declineDeadlinePush;
+// Meeting transcript functions
+window.openMeetingTranscriptModal = openMeetingTranscriptModal;
+window.closeMeetingTranscriptModal = closeMeetingTranscriptModal;
+window.processMeetingTranscript = processMeetingTranscript;
+window.switchTranscriptTab = switchTranscriptTab;
+window.startMeetingRecording = startMeetingRecording;
+window.stopMeetingRecording = stopMeetingRecording;
 
 // -----------------------------
 // Gemini API integration for text refinement
@@ -237,6 +244,7 @@ function hideLoading() {
 // Global state
 // -----------------------------
 let currentUser = null;
+let currentUserUid = null;
 let tasks = [];
 let notifications = [];
 let messages = [];
@@ -262,6 +270,10 @@ const messagesCollection = collection(db, "messages");
 const chatCollection = collection(db, "chatHistory");
 const knowledgeCollection = collection(db, "knowledgeBase");
 const deadlinePushCollection = collection(db, "deadlinePushRequests");
+
+function getCurrentUid() {
+  return currentUserUid || auth.currentUser?.uid || null;
+}
 
 function handleFirebasePermissionError(source, error) {
   if (error?.code !== "permission-denied") return;
@@ -289,6 +301,7 @@ function handleFirebasePermissionError(source, error) {
 function logout() {
   if (confirm(`Logout ${currentUser}?`)) {
     currentUser = null;
+    currentUserUid = null;
     localStorage.removeItem("taskledger_user");
     window.location.href = "login.html";
   }
@@ -308,7 +321,8 @@ async function checkLogin() {
     }
     
     try {
-      await ensureFirebaseSession();
+      const firebaseUser = await ensureFirebaseSession();
+      currentUserUid = firebaseUser?.uid || auth.currentUser?.uid || null;
       initializeApp();
     } catch (error) {
       console.error("Firebase authentication setup failed:", error);
@@ -486,10 +500,15 @@ async function formatTaskLedger() {
   showLoading('Formatting TaskLedger...');
 
   try {
+    const uid = getCurrentUid();
+    if (!uid) {
+      throw new Error("No authenticated Firebase uid for format operation");
+    }
+
     await extractAndSaveKnowledge();
     await loadKnowledgeBase();
 
-    const allTasksSnapshot = await getDocs(tasksCollection);
+    const allTasksSnapshot = await getDocs(query(tasksCollection, where("ownerUid", "==", uid)));
     const taskFileDeletePromises = [];
     const taskDocDeletePromises = [];
 
@@ -559,6 +578,12 @@ function handlePriorityChange() {
 // -----------------------------
 async function addTask() {
   showLoading('Creating task...');
+  const uid = getCurrentUid();
+  if (!uid) {
+    hideLoading();
+    alert("Unable to verify your Firebase session. Please refresh and try again.");
+    return;
+  }
   
   const title = document.getElementById("taskTitle").value.trim();
   const description = document.getElementById("taskDescription").value.trim();
@@ -642,6 +667,7 @@ async function addTask() {
     completionNotes: "",
     updates: [],
     owner: currentUser,
+    ownerUid: uid,
     createdBy: currentUser,
     attachments: [], // Initialize empty attachments array
   });
@@ -3083,18 +3109,51 @@ function scheduleDeadlineCheck() {
   }, 1000); // Wait 1 second after tasks update to check
 }
 
+async function backfillLegacyTaskOwnership() {
+  const uid = getCurrentUid();
+  if (!uid || !currentUser) return;
+
+  const legacySnapshot = await getDocs(query(tasksCollection, where("owner", "==", currentUser)));
+  if (legacySnapshot.empty) return;
+
+  const legacyTasks = legacySnapshot.docs
+    .map(taskDoc => ({ id: taskDoc.id, ...taskDoc.data() }))
+    .filter(task => !task.ownerUid);
+  if (legacyTasks.length === 0) return;
+
+  await Promise.all(
+    legacyTasks.map(task =>
+      updateDoc(doc(db, "tasks", task.id), { ownerUid: uid })
+    )
+  );
+}
+
 // -----------------------------
 // Fetch and listen for real-time updates
 // -----------------------------
 function initializeApp() {
   if (!currentUser) return;
+  const uid = getCurrentUid();
+  if (!uid) {
+    console.error("Missing Firebase uid; cannot initialize task listeners safely.");
+    return;
+  }
 
   showLoading('Loading tasks...');
-  const q = query(tasksCollection, orderBy("createdAt", "desc"));
+  const q = query(tasksCollection, where("ownerUid", "==", uid));
   onSnapshot(q, (snapshot) => {
-    // Load ALL tasks for collaborative access - both Craig and Nate see all tasks
+    // Load tasks owned by the current authenticated Firebase user
     tasks = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }));
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const aSec = a.createdAt?.seconds || 0;
+        const bSec = b.createdAt?.seconds || 0;
+        return bSec - aSec;
+      });
+
+    backfillLegacyTaskOwnership().catch((error) => {
+      console.warn("Legacy task ownership backfill failed:", error);
+    });
     
     // Filter by status
     // Include tasks that are in-review but submitted by current user so they don't disappear
@@ -3145,16 +3204,37 @@ function initializeApp() {
       if (change.type === "added") {
         const data = change.doc.data();
         
-        // Trigger browser notification popup
+        // Trigger browser notification popup with coffee/leather theme
         if (Notification.permission === "granted" && !data.read) {
-          new Notification("TaskLedger Update", {
-            body: data.message,
-            icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%232563eb'/%3E%3Ctext x='50' y='50' font-size='40' text-anchor='middle' dominant-baseline='middle' fill='white'%3ETL%3C/text%3E%3C/svg%3E",
-            badge: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%232563eb'/%3E%3C/svg%3E",
-            tag: data.type,
-            requireInteraction: false,
-            silent: false
-          });
+          // Try to use service worker for background notifications
+          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then((registration) => {
+              registration.showNotification("TaskLedger Update", {
+                body: data.message,
+                icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%236f4e37'/%3E%3Ctext x='50' y='50' font-size='40' text-anchor='middle' dominant-baseline='middle' fill='%23f5f5dc'%3ETL%3C/text%3E%3C/svg%3E",
+                badge: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%236f4e37'/%3E%3C/svg%3E",
+                tag: data.type,
+                requireInteraction: data.type === 'urgent' || data.message.includes('URGENT'),
+                silent: false,
+                vibrate: data.message.includes('URGENT') ? [200, 100, 200] : [100],
+                data: {
+                  url: '/',
+                  taskId: data.taskId || null,
+                  notificationId: change.doc.id
+                }
+              });
+            });
+          } else {
+            // Fallback to regular notification
+            new Notification("TaskLedger Update", {
+              body: data.message,
+              icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%236f4e37'/%3E%3Ctext x='50' y='50' font-size='40' text-anchor='middle' dominant-baseline='middle' fill='%23f5f5dc'%3ETL%3C/text%3E%3C/svg%3E",
+              badge: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%236f4e37'/%3E%3C/svg%3E",
+              tag: data.type,
+              requireInteraction: data.message.includes('URGENT'),
+              silent: false
+            });
+          }
         }
       }
     });
@@ -4092,7 +4172,180 @@ When answering:
 // (Removed duplicate callGeminiAPI definition. Use the top-level callGeminiAPI for all Gemini API calls.)
 // Get AI response
 async function getAIResponse(userMessage) {
-  // Search knowledge base and format results for context
+  // Check if user wants to create a task
+  const taskCreationPatterns = [
+    /I need to (do|complete|finish|work on) (.+?)(?:\s+urgently|\s+asap|\s+soon)?[.!]?$/i,
+    /add (?:a )?task:?\s*(.+)/i,
+    /create (?:a )?task:?\s*(.+)/i,
+    /reminder:?\s*(.+)/i,
+    /todo:?\s*(.+)/i,
+    /(?:craig|nate) needs? to (.+?)(?:\s+urgently|\s+asap)?[.!]?$/i
+  ];
+  
+  let taskMatch = null;
+  let taskText = null;
+  let isUrgent = false;
+  
+  for (const pattern of taskCreationPatterns) {
+    taskMatch = userMessage.match(pattern);
+    if (taskMatch) {
+      taskText = taskMatch[taskMatch.length - 1].trim();
+      isUrgent = /urgently|asap|urgent|immediately/i.test(userMessage);
+      break;
+    }
+  }
+  
+  // If task creation detected, create it automatically
+  if (taskMatch && taskText) {
+    try {
+      const priority = isUrgent ? 'high' : 'medium';
+      const uid = getCurrentUid();
+      
+      const newTask = await addDoc(tasksCollection, {
+        title: taskText,
+        description: '',
+        notes: `Created via AI chat: "${userMessage}"`,
+        needs: [],
+        priority: priority,
+        deadline: null,
+        done: false,
+        createdAt: new Date(),
+        completionNotes: "",
+        updates: [],
+        owner: currentUser,
+        ownerUid: uid,
+        createdBy: currentUser,
+        attachments: [],
+      });
+      
+      // Send notification to other user
+      const recipient = currentUser === "Nate" ? "Craig" : "Nate";
+      await addDoc(notificationsCollection, {
+        type: "task_created_by_ai",
+        taskId: newTask.id,
+        message: `${currentUser} created a task via AI: "${taskText}"${isUrgent ? ' (URGENT)' : ''}`,
+        createdAt: new Date(),
+        read: false,
+        recipient: recipient,
+        sender: currentUser,
+      });
+      
+      const urgentFlag = isUrgent ? ' ⚡ URGENT' : '';
+      return `✅ Task created successfully${urgentFlag}!\n\n**"${taskText}"**\n\nPriority: ${priority === 'high' ? '🔴 High' : '🟡 Medium'}\nAssigned to: ${currentUser}\n\nI've also notified ${recipient} about this task.`;
+    } catch (error) {
+      console.error('Error creating task via AI:', error);
+      return `I understood you want to create a task: "${taskText}", but I encountered an error. Please try creating it manually.`;
+    }
+  }
+  
+  // Check if user is sharing meeting notes for transcription
+  const meetingNotesPatterns = [
+    /meeting notes?:?\s*(.+)/is,
+    /transcribe:?\s*(.+)/is,
+    /from (?:my|the) meeting:?\s*(.+)/is
+  ];
+  
+  let meetingMatch = null;
+  let meetingContent = null;
+  
+  for (const pattern of meetingNotesPatterns) {
+    meetingMatch = userMessage.match(pattern);
+    if (meetingMatch) {
+      meetingContent = meetingMatch[1].trim();
+      break;
+    }
+  }
+  
+  // If meeting notes detected, extract tasks
+  if (meetingMatch && meetingContent) {
+    try {
+      const extractionPrompt = `Extract actionable tasks from these meeting notes. For each task, identify:
+1. The task description (what needs to be done)
+2. Who should do it (if mentioned)
+3. Priority level (high/medium/low based on urgency keywords)
+4. Any deadlines mentioned
+
+Meeting notes:
+${meetingContent}
+
+Format your response as JSON array:
+[
+  {"task": "task description", "assignee": "Craig or Nate or unknown", "priority": "high/medium/low", "deadline": "date or null"}
+]
+
+If no actionable tasks found, return empty array: []`;
+
+      const extractedData = await callGeminiAPI(extractionPrompt);
+      
+      // Try to parse the JSON response
+      let tasksToCreate = [];
+      try {
+        // Extract JSON from markdown code blocks if present
+        const jsonMatch = extractedData.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          tasksToCreate = JSON.parse(jsonMatch[0]);
+        }
+      } catch (parseError) {
+        console.error('Error parsing extracted tasks:', parseError);
+      }
+      
+      if (tasksToCreate.length > 0) {
+        const createdTasks = [];
+        const uid = getCurrentUid();
+        
+        for (const taskData of tasksToCreate) {
+          const newTask = await addDoc(tasksCollection, {
+            title: taskData.task,
+            description: `Extracted from meeting notes`,
+            notes: `Original notes: ${meetingContent.substring(0, 200)}...`,
+            needs: [],
+            priority: taskData.priority || 'medium',
+            deadline: taskData.deadline ? new Date(taskData.deadline) : null,
+            done: false,
+            createdAt: new Date(),
+            completionNotes: "",
+            updates: [],
+            owner: taskData.assignee && taskData.assignee !== 'unknown' ? taskData.assignee : currentUser,
+            ownerUid: uid,
+            createdBy: currentUser,
+            attachments: [],
+          });
+          
+          createdTasks.push({
+            title: taskData.task,
+            assignee: taskData.assignee,
+            priority: taskData.priority
+          });
+          
+          // Notify the assignee if different from current user
+          if (taskData.assignee && taskData.assignee !== currentUser && taskData.assignee !== 'unknown') {
+            await addDoc(notificationsCollection, {
+              type: "task_assigned",
+              taskId: newTask.id,
+              message: `${currentUser} assigned you a task from meeting notes: "${taskData.task}"`,
+              createdAt: new Date(),
+              read: false,
+              recipient: taskData.assignee,
+              sender: currentUser,
+            });
+          }
+        }
+        
+        const summary = createdTasks.map((t, i) => 
+          `${i + 1}. **${t.title}**\n   Assigned to: ${t.assignee || 'You'}\n   Priority: ${t.priority === 'high' ? '🔴 High' : t.priority === 'low' ? '🟢 Low' : '🟡 Medium'}`
+        ).join('\n\n');
+        
+        return `📝 Meeting notes processed successfully!\n\nI created ${createdTasks.length} task(s):\n\n${summary}\n\nAll relevant people have been notified.`;
+      } else {
+        return `I reviewed your meeting notes but didn't find any clear action items to create as tasks. You can add them manually if needed.`;
+      }
+    } catch (error) {
+      console.error('Error processing meeting notes:', error);
+      return `I encountered an error processing your meeting notes: ${error.message}. Please try again.`;
+    }
+  }
+  
+  // Normal query processing
   const knowledgeResults = await searchKnowledgeBase(userMessage);
   const knowledgeContext = knowledgeResults.length > 0 
     ? '\n\nRELEVANT KNOWLEDGE BASE ENTRIES:\n' + knowledgeResults.map((item, index) => 
@@ -4375,6 +4628,241 @@ window.addEventListener('beforeunload', (event) => {
   // Fire and forget - don't block closing
   extractAndSaveKnowledge();
 });
+
+// -----------------------------
+// Meeting Transcript Functions
+// -----------------------------
+
+let mediaRecorder = null;
+let recordingChunks = [];
+let recordingStartTime = null;
+let recordingInterval = null;
+
+function openMeetingTranscriptModal() {
+  document.getElementById('meetingTranscriptModal').style.display = 'flex';
+  document.getElementById('meetingTranscript').value = '';
+  document.getElementById('meetingTitle').value = '';
+  document.getElementById('meetingDate').valueAsDate = new Date();
+  switchTranscriptTab('paste');
+}
+
+function closeMeetingTranscriptModal() {
+  document.getElementById('meetingTranscriptModal').style.display = 'none';
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopMeetingRecording();
+  }
+}
+
+function switchTranscriptTab(tab) {
+  // Update tab buttons
+  document.querySelectorAll('.transcript-tab').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  event.target.classList.add('active');
+  
+  // Show/hide sections
+  document.getElementById('pasteTranscriptSection').style.display = tab === 'paste' ? 'block' : 'none';
+  document.getElementById('recordTranscriptSection').style.display = tab === 'record' ? 'block' : 'none';
+  document.getElementById('guideTranscriptSection').style.display = tab === 'guide' ? 'block' : 'none';
+}
+
+async function startMeetingRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    mediaRecorder = new MediaRecorder(stream);
+    recordingChunks = [];
+    recordingStartTime = Date.now();
+    
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordingChunks.push(event.data);
+      }
+    };
+    
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordingChunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(blob);
+      document.getElementById('recordingAudio').src = url;
+      document.getElementById('recordingPreview').style.display = 'block';
+      
+      // Stop all tracks
+      stream.getTracks().forEach(track => track.stop());
+    };
+    
+    mediaRecorder.start();
+    
+    // Update UI
+    document.getElementById('startRecordingBtn').style.display = 'none';
+    document.getElementById('stopRecordingBtn').style.display = 'block';
+    document.getElementById('recordingStatus').style.display = 'flex';
+    
+    // Start timer
+    recordingInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+      const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+      const seconds = (elapsed % 60).toString().padStart(2, '0');
+      document.getElementById('recordingTime').textContent = `${minutes}:${seconds}`;
+    }, 1000);
+    
+  } catch (error) {
+    console.error('Error starting recording:', error);
+    alert('Could not access microphone. Please grant permission and try again.');
+  }
+}
+
+function stopMeetingRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    
+    // Update UI
+    document.getElementById('startRecordingBtn').style.display = 'block';
+    document.getElementById('stopRecordingBtn').style.display = 'none';
+    document.getElementById('recordingStatus').style.display = 'none';
+    
+    // Stop timer
+    if (recordingInterval) {
+      clearInterval(recordingInterval);
+      recordingInterval = null;
+    }
+  }
+}
+
+async function processMeetingTranscript() {
+  const transcript = document.getElementById('meetingTranscript').value.trim();
+  const meetingTitle = document.getElementById('meetingTitle').value.trim();
+  const meetingDate = document.getElementById('meetingDate').value;
+  
+  if (!transcript) {
+    alert('Please paste a meeting transcript first.');
+    return;
+  }
+  
+  showLoading('Processing meeting transcript...');
+  
+  try {
+    // Extract tasks from transcript using AI
+    const extractionPrompt = `Analyze this meeting transcript and extract all actionable tasks, decisions, and follow-ups.
+
+For each item, identify:
+1. What needs to be done (task description)
+2. Who is responsible (if mentioned: Craig, Nate, or unknown)
+3. Priority (high/medium/low based on urgency words like "ASAP", "urgent", "important", "when you can")
+4. Deadline (if mentioned, in YYYY-MM-DD format, or null)
+5. Context (brief note about why this task exists)
+
+Meeting transcript:
+${transcript}
+
+Return ONLY a valid JSON array in this exact format:
+[
+  {
+    "task": "Complete Q3 financial report",
+    "assignee": "Nate",
+    "priority": "high",
+    "deadline": "2026-07-05",
+    "context": "Discussed in Q3 planning meeting"
+  }
+]
+
+If no actionable tasks are found, return: []
+
+IMPORTANT: Return ONLY the JSON array, no other text.`;
+
+    const response = await callGeminiAPI(extractionPrompt);
+    
+    // Extract JSON from response
+    let tasksToCreate = [];
+    try {
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        tasksToCreate = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.error('Error parsing AI response:', parseError);
+      console.log('AI Response:', response);
+      hideLoading();
+      alert('Could not parse AI response. The transcript might not contain clear action items, or try rephrasing the transcript.');
+      return;
+    }
+    
+    if (!Array.isArray(tasksToCreate) || tasksToCreate.length === 0) {
+      hideLoading();
+      alert('No actionable tasks found in the transcript. Make sure the transcript contains clear action items or assignments.');
+      return;
+    }
+    
+    // Create tasks
+    const createdTasks = [];
+    const uid = getCurrentUid();
+    const meetingNotePrefix = meetingTitle ? `From "${meetingTitle}"` : 'From meeting';
+    const meetingDateStr = meetingDate ? ` on ${new Date(meetingDate).toLocaleDateString()}` : '';
+    
+    for (const taskData of tasksToCreate) {
+      const assignee = taskData.assignee && ['Craig', 'Nate'].includes(taskData.assignee) 
+        ? taskData.assignee 
+        : currentUser;
+      
+      const newTask = await addDoc(tasksCollection, {
+        title: taskData.task,
+        description: `${meetingNotePrefix}${meetingDateStr}\n\nContext: ${taskData.context || 'Extracted from meeting transcript'}`,
+        notes: `Meeting transcript snippet:\n${transcript.substring(0, 300)}...`,
+        needs: [],
+        priority: taskData.priority || 'medium',
+        deadline: taskData.deadline ? new Date(taskData.deadline) : null,
+        done: false,
+        createdAt: new Date(),
+        completionNotes: "",
+        updates: [],
+        owner: assignee,
+        ownerUid: uid,
+        createdBy: currentUser,
+        attachments: [],
+      });
+      
+      createdTasks.push({
+        id: newTask.id,
+        title: taskData.task,
+        assignee: assignee,
+        priority: taskData.priority || 'medium'
+      });
+      
+      // Notify assignee if different from current user
+      if (assignee !== currentUser) {
+        await addDoc(notificationsCollection, {
+          type: "task_assigned",
+          taskId: newTask.id,
+          message: `${currentUser} assigned you a task from meeting: "${taskData.task}"`,
+          createdAt: new Date(),
+          read: false,
+          recipient: assignee,
+          sender: currentUser,
+        });
+      }
+    }
+    
+    hideLoading();
+    closeMeetingTranscriptModal();
+    
+    // Show success message
+    const priorityEmoji = (p) => p === 'high' ? '🔴' : p === 'low' ? '🟢' : '🟡';
+    const summary = createdTasks.map((t, i) => 
+      `${i + 1}. ${t.title}\n   → ${t.assignee} | ${priorityEmoji(t.priority)} ${t.priority}`
+    ).join('\n\n');
+    
+    alert(`✅ Successfully created ${createdTasks.length} task(s) from meeting transcript!\n\n${summary}\n\nAll relevant people have been notified.`);
+    
+    // Switch to tasks view
+    document.querySelector('.nav-link[data-view="tasks"]').click();
+    
+  } catch (error) {
+    console.error('Error processing meeting transcript:', error);
+    hideLoading();
+    alert(`Error processing transcript: ${error.message}\n\nPlease try again or check the console for details.`);
+  }
+}
 
 // Initialize chatbot
 async function initializeChatBot() {

@@ -5,9 +5,27 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isTaskOwnerByUid() {
+      return isSignedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    function isTaskOwnerByUidOnCreate() {
+      return isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function canClaimLegacyTaskOwnership() {
+      return isSignedIn()
+        && !("ownerUid" in resource.data)
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["ownerUid"]);
+    }
+
     // TaskLedger collections used by the app
     match /tasks/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isTaskOwnerByUidOnCreate();
+      allow update: if isTaskOwnerByUid() || canClaimLegacyTaskOwnership();
+      allow delete: if isTaskOwnerByUid();
     }
 
     match /notifications/{docId} {
